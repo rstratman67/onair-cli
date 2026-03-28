@@ -38,6 +38,11 @@ yargs(hideBin(process.argv))
     global: true,
     describe: 'Your Virtual Airline ID (not to be confused with Company ID orAPI key)'
   })
+  .option('csv', {
+    type: 'string',
+    global: true,
+    describe: 'Write command output to CSV file(s) for Excel import'
+  })
   .middleware(getCreds)
   .command(saveCredsCommand)
   .command(deleteCredsCommand)

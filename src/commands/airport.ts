@@ -5,6 +5,7 @@ import OnAirApi, { OnAirApiConfig, Airport, AirportFrequency, AirportLocation } 
 import { cliTable } from '../utils/cli-table';
 import { CommonConfig } from '../utils/commonTypes';
 import { logAirport } from '../loggers/logAirport';
+import { writeCsvSections } from '../utils/csv';
 
 const builder = (yargs: yargs.Argv<CommonConfig>) => {
   return yargs.positional('ICAO', {
@@ -65,6 +66,15 @@ export const airportCommand: AirportCommand = {
         log(parkingTable.toString());
       } else {
         log(`\nSuggested command: ${argv['$0']} airport ${argv['ICAO']} --parking-spots`);
+      }
+
+      if (argv['csv']) {
+        const files = writeCsvSections(argv['csv'], [
+          { name: 'airport', rows: [airport as unknown as Record<string, unknown>] },
+          { name: 'frequencies', rows: airport.AirportFrequencies as unknown as Record<string, unknown>[] },
+          { name: 'parking_spots', rows: typeof argv['parking-spots'] !== 'undefined' ? airport.AirportLocations as unknown as Record<string, unknown>[] : [] },
+        ]);
+        files.forEach((file) => log(`CSV written: ${file}`));
       }
 
       log(chalk.grey('\nGood Day'));

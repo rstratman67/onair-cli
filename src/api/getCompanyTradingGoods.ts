@@ -9,6 +9,7 @@ interface CompanyTradingGoodsResponse {
   Content?: CompanyTradingGood[] | CompanyTradingGood;
 }
 
+// `onair-api` does not expose this endpoint yet, so the CLI calls it directly.
 export const getCompanyTradingGoods = async (companyId: string, apiKey: string): Promise<CompanyTradingGood[]> => {
   try {
     const response = await axios.get<CompanyTradingGoodsResponse>(

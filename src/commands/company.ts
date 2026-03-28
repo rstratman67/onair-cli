@@ -10,9 +10,11 @@ import { logCompanyFbos } from '../loggers/logCompanyFbos';
 import { logCompanyJobs } from '../loggers/logCompanyJobs';
 import { CompanyTradingGood, getCompanyTradingGoods } from '../api/getCompanyTradingGoods';
 import { logCompanyTradingGoods } from '../loggers/logCompanyTradingGoods';
+import { keyValueRows, writeCsvSections } from '../utils/csv';
 
 const log = console.log;
 
+// Read nested properties safely from API responses whose shape can vary.
 const getNestedStringValue = (value: unknown, path: string[]): string | undefined => {
   let current: unknown = value;
 
@@ -27,6 +29,7 @@ const getNestedStringValue = (value: unknown, path: string[]): string | undefine
   return typeof current === 'string' ? current : undefined;
 };
 
+// Trading goods are filtered client-side because the endpoint is fetched as one list.
 const filterTradingGoods = (tradingGoods: CompanyTradingGood[], merchandiseTypeName?: string): CompanyTradingGood[] => {
   if (!merchandiseTypeName) {
     return tradingGoods;
@@ -40,6 +43,7 @@ const filterTradingGoods = (tradingGoods: CompanyTradingGood[], merchandiseTypeN
   });
 };
 
+// Airports without an ICAO are pushed to the end to keep the visible rows stable.
 const sortTradingGoodsByAirportIcao = <T extends Record<string, unknown>>(tradingGoods: T[]): T[] => {
   return [...tradingGoods].sort((left, right) => {
     const leftIcao = getNestedStringValue(left, ['CurrentAirport', 'ICAO']) || '';
@@ -106,6 +110,13 @@ export const companyCommand: CompanyCommand = {
       if (typeof argv['action'] === 'undefined') {
         const company: Company = await api.getCompany();
         logCompany(company);
+
+        if (argv['csv']) {
+          const files = writeCsvSections(argv['csv'], [
+            { name: 'company', rows: keyValueRows(company as unknown as Record<string, unknown>) }
+          ]);
+          files.forEach((file) => log(`CSV written: ${file}`));
+        }
       } else {
         switch (argv['action']) {
           case 'fleet': {
@@ -117,6 +128,13 @@ export const companyCommand: CompanyCommand = {
               
               log(`\nSuggested command: ${argv['$0']} aircraft <aircraftId>`);
               log(`Suggested command: ${argv['$0']} flights <aircraftId>`);
+
+              if (argv['csv']) {
+                const files = writeCsvSections(argv['csv'], [
+                  { name: 'company_fleet', rows: companyFleet as unknown as Record<string, unknown>[] }
+                ]);
+                files.forEach((file) => log(`CSV written: ${file}`));
+              }
             } else {
               log('Dude, where\'s your aircraft?! ' + chalk.magentaBright('✈'));
             }
@@ -137,6 +155,13 @@ export const companyCommand: CompanyCommand = {
               }
               log(`Suggested command: ${argv['$0']} airport <ICAO>`); 
               log(`Suggested command: ${argv['$0']} flight <flightId> (Completed only)`);
+
+              if (argv['csv']) {
+                const files = writeCsvSections(argv['csv'], [
+                  { name: 'company_flights', rows: companyFlights as unknown as Record<string, unknown>[] }
+                ]);
+                files.forEach((file) => log(`CSV written: ${file}`));
+              }
             } else {
               log('I feel the need... the need for speed! ' + chalk.magentaBright('✈'));
             }
@@ -149,6 +174,13 @@ export const companyCommand: CompanyCommand = {
             if (companyFbos.length) {
               log(chalk.greenBright.bold('Your FBOs\n'));
               logCompanyFbos(companyFbos);
+
+              if (argv['csv']) {
+                const files = writeCsvSections(argv['csv'], [
+                  { name: 'company_fbos', rows: companyFbos as unknown as Record<string, unknown>[] }
+                ]);
+                files.forEach((file) => log(`CSV written: ${file}`));
+              }
             } else {
               log('No FBO... no 100LL! ' + chalk.magentaBright('✈'))
             }
@@ -161,6 +193,13 @@ export const companyCommand: CompanyCommand = {
             if (companyJobs.length) {
               log(chalk.greenBright.bold('Your Pending Jobs\n'));
               logCompanyJobs(companyJobs);
+
+              if (argv['csv']) {
+                const files = writeCsvSections(argv['csv'], [
+                  { name: 'company_jobs', rows: companyJobs as unknown as Record<string, unknown>[] }
+                ]);
+                files.forEach((file) => log(`CSV written: ${file}`));
+              }
             } else {
               log('No pending jobs! ' + chalk.magentaBright('✈'))
             }
@@ -176,6 +215,13 @@ export const companyCommand: CompanyCommand = {
             if (sortedTradingGoods.length) {
               log(chalk.greenBright.bold('Your Trading Goods\n'));
               logCompanyTradingGoods(sortedTradingGoods);
+
+              if (argv['csv']) {
+                const files = writeCsvSections(argv['csv'], [
+                  { name: 'company_trading_goods', rows: sortedTradingGoods as unknown as Record<string, unknown>[] }
+                ]);
+                files.forEach((file) => log(`CSV written: ${file}`));
+              }
             } else {
               log(
                 argv['merchandiseType']

@@ -4,4 +4,5 @@ export interface CommonConfig {
   world: string | undefined;
   companyId: string | undefined;
   vaId: string | undefined;
+  csv: string | undefined;
 }

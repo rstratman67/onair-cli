@@ -30,6 +30,14 @@ Your OnAir API key and Company ID are found in the bottom left of the settings p
 
 ## Commands
 
+### CSV Export
+
+Any command output can also be exported to CSV for Excel import with `--csv`.
+
+`onair-cli company fleet --csv=company-fleet.csv`
+
+Commands with multiple output sections will create multiple CSV files using the provided filename as a base, for example `aircraft.csv` may produce `aircraft.aircraft.csv` and `aircraft.flights.csv`.
+
 ### Aircraft
 
 Show details on an aircraft, including it's recent flights.

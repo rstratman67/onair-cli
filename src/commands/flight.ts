@@ -6,6 +6,7 @@ import { CommonConfig } from '../utils/commonTypes';
 import { logFlight } from '../loggers/logFlight';
 import { logAircraft } from '../loggers/logAircraft';
 import { logAirport } from '../loggers/logAirport';
+import { writeCsvSections } from '../utils/csv';
 
 const builder = (yargs: yargs.Argv<CommonConfig>) => {
   return yargs
@@ -54,6 +55,16 @@ export const flightCommand: FlightCommand = {
       if (typeof argv['show-aircraft'] !== 'undefined') {
         console.log();
         logAircraft(flight.Aircraft);
+      }
+
+      if (argv['csv']) {
+        const files = writeCsvSections(argv['csv'], [
+          { name: 'flight', rows: [flight as unknown as Record<string, unknown>] },
+          { name: 'departure_airport', rows: [flight.DepartureAirport as unknown as Record<string, unknown>] },
+          { name: 'arrival_airport', rows: [flight.ArrivalActualAirport as unknown as Record<string, unknown>] },
+          { name: 'aircraft', rows: typeof argv['show-aircraft'] !== 'undefined' ? [flight.Aircraft as unknown as Record<string, unknown>] : [] },
+        ]);
+        files.forEach((file) => console.log(`CSV written: ${file}`));
       }
 
       console.log(chalk.grey('\nGood Day'));

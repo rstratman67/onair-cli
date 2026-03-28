@@ -5,6 +5,7 @@ import OnAirApi, { OnAirApiConfig, Member, VirtualAirline } from 'onair-api';
 import { CommonConfig } from '../utils/commonTypes';;
 import { logVirtualAirline } from '../loggers/logVirtualAirline';
 import { logVirtualAirlineMembers } from '../loggers/logVirtualAirlineMembers';
+import { keyValueRows, writeCsvSections } from '../utils/csv';
 
 const log = console.log;
 
@@ -39,6 +40,13 @@ export const vaCommand: VACommand = {
       if (typeof argv['action'] === 'undefined') {
         const va: VirtualAirline = await api.getVirtualAirline();
         logVirtualAirline(va);
+
+        if (argv['csv']) {
+          const files = writeCsvSections(argv['csv'], [
+            { name: 'virtual_airline', rows: keyValueRows(va as unknown as Record<string, unknown>) }
+          ]);
+          files.forEach((file) => log(`CSV written: ${file}`));
+        }
       } else {
         switch (argv['action']) {
           case 'members': {
@@ -48,6 +56,14 @@ export const vaCommand: VACommand = {
               log(chalk.greenBright.bold(`(${va.AirlineCode}) ${va.Name} Members\n`));
               
               logVirtualAirlineMembers(vaMembers);
+
+              if (argv['csv']) {
+                const files = writeCsvSections(argv['csv'], [
+                  { name: 'virtual_airline', rows: [va as unknown as Record<string, unknown>] },
+                  { name: 'members', rows: vaMembers as unknown as Record<string, unknown>[] }
+                ]);
+                files.forEach((file) => log(`CSV written: ${file}`));
+              }
               
             } else {
               log('You have no members?!');

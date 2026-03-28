@@ -4,6 +4,7 @@ import OnAirApi, { OnAirApiConfig, Flight } from 'onair-api';
 
 import { CommonConfig } from '../utils/commonTypes';;
 import { logFlights } from '../loggers/logFlights';
+import { writeCsvSections } from '../utils/csv';
 
 const builder = (yargs: yargs.Argv<CommonConfig>) => {
   return yargs
@@ -53,6 +54,13 @@ export const flightsCommand: FlightsCommand = {
       }
       console.log(`Suggested command: ${argv['$0']} aircraft ${argv['aircraftId']}`);
       console.log(`Suggested command: ${argv['$0']} flight <flightId> (Completed only)`);
+
+      if (argv['csv']) {
+        const files = writeCsvSections(argv['csv'], [
+          { name: 'flights', rows: flights as unknown as Record<string, unknown>[] }
+        ]);
+        files.forEach((file) => console.log(`CSV written: ${file}`));
+      }
 
       console.log(chalk.grey('\nGood Day'));
     } catch (e) {
