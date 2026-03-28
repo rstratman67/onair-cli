@@ -32,6 +32,36 @@ const getNestedStringValue = (value: unknown, path: string[]): string | undefine
   return typeof current === 'string' ? current : undefined;
 };
 
+const getNestedBooleanValue = (value: unknown, path: string[]): boolean | undefined => {
+  let current: unknown = value;
+
+  for (const segment of path) {
+    if (typeof current !== 'object' || current === null || !(segment in current)) {
+      return undefined;
+    }
+
+    current = (current as Record<string, unknown>)[segment];
+  }
+
+  return typeof current === 'boolean' ? current : undefined;
+};
+
+const getNestedDateValue = (value: unknown, paths: string[][]): Date | undefined => {
+  for (const path of paths) {
+    const dateValue = getNestedStringValue(value, path);
+
+    if (dateValue) {
+      const parsed = new Date(dateValue);
+
+      if (!Number.isNaN(parsed.getTime())) {
+        return parsed;
+      }
+    }
+  }
+
+  return undefined;
+};
+
 // Trading goods are filtered client-side because the endpoint is fetched as one list.
 const filterTradingGoods = (tradingGoods: CompanyTradingGood[], merchandiseTypeName?: string): CompanyTradingGood[] => {
   if (!merchandiseTypeName) {
@@ -83,6 +113,55 @@ const filterWorkOrdersByAircraft = (workOrders: CompanyWorkOrder[], aircraftId?:
     return [directAircraftId, nestedAircraftId, nestedIdentifier]
       .filter((value): value is string => typeof value === 'string')
       .some((value) => value.toLocaleLowerCase().includes(filterValue));
+  });
+};
+
+const filterWorkOrdersById = (workOrders: CompanyWorkOrder[], workOrderId?: string): CompanyWorkOrder[] => {
+  if (!workOrderId) {
+    return workOrders;
+  }
+
+  const filterValue = workOrderId.toLocaleLowerCase();
+
+  return workOrders.filter((workOrder) => {
+    const id = getNestedStringValue(workOrder, ['Id']);
+    return typeof id === 'string' && id.toLocaleLowerCase().includes(filterValue);
+  });
+};
+
+const filterWorkOrdersByTicking = (workOrders: CompanyWorkOrder[], isTicking?: boolean): CompanyWorkOrder[] => {
+  if (typeof isTicking === 'undefined') {
+    return workOrders;
+  }
+
+  return workOrders.filter((workOrder) => getNestedBooleanValue(workOrder, ['IsTicking']) === isTicking);
+};
+
+const filterWorkOrdersByLastTickSource = (workOrders: CompanyWorkOrder[], lastTickSource?: string): CompanyWorkOrder[] => {
+  if (!lastTickSource) {
+    return workOrders;
+  }
+
+  const filterValue = lastTickSource.toLocaleLowerCase();
+
+  return workOrders.filter((workOrder) => {
+    const value = getNestedStringValue(workOrder, ['LastTickSource']);
+    return typeof value === 'string' && value.toLocaleLowerCase().includes(filterValue);
+  });
+};
+
+const filterWorkOrdersByStartDays = (workOrders: CompanyWorkOrder[], startDays?: number): CompanyWorkOrder[] => {
+  if (typeof startDays === 'undefined') {
+    return workOrders;
+  }
+
+  const now = new Date();
+  const threshold = new Date(now);
+  threshold.setDate(now.getDate() - startDays);
+
+  return workOrders.filter((workOrder) => {
+    const startDate = getNestedDateValue(workOrder, [['StartDate'], ['StartDateTime']]);
+    return typeof startDate !== 'undefined' && startDate >= threshold && startDate <= now;
   });
 };
 
@@ -149,6 +228,23 @@ const builder = (yargs: yargs.Argv<CommonConfig>) => {
       type: 'string',
       alias: 'a',
     })
+    .option('workOrderId', {
+      describe: 'Filter work orders by work order ID',
+      type: 'string',
+      alias: 'w',
+    })
+    .option('isTicking', {
+      describe: 'Filter work orders by IsTicking',
+      type: 'boolean',
+    })
+    .option('lastTickSource', {
+      describe: 'Filter work orders by LastTickSource',
+      type: 'string',
+    })
+    .option('startDays', {
+      describe: 'Filter work orders by Start Date within the last N days',
+      type: 'number',
+    })
     .option('hideIds', {
       describe: 'Hide raw ID fields when displaying work orders',
       type: 'boolean',
@@ -156,6 +252,16 @@ const builder = (yargs: yargs.Argv<CommonConfig>) => {
     })
     .option('crews', {
       describe: 'Show only work order names plus one human-readable column per crew',
+      type: 'boolean',
+      default: false,
+    })
+    .option('debugWorkOrders', {
+      describe: 'Print raw work order JSON to help inspect fields like Actions',
+      type: 'boolean',
+      default: false,
+    })
+    .option('blockOutput', {
+      describe: 'Show work orders as Field: Value blocks separated by ###',
       type: 'boolean',
       default: false,
     })
@@ -190,8 +296,14 @@ const builder = (yargs: yargs.Argv<CommonConfig>) => {
     .example('$0 company trading-goods --hideIds', 'Hide raw ID fields in trading goods output')
     .example('$0 company workorders', 'List your company work orders')
     .example('$0 company workorders --aircraftId=N123AB', 'Filter work orders by aircraft')
+    .example('$0 company workorders --workOrderId=<id>', 'Filter work orders by work order ID')
+    .example('$0 company workorders --isTicking', 'Filter work orders where IsTicking is true')
+    .example('$0 company workorders --lastTickSource=Aircraft', 'Filter work orders by last tick source')
+    .example('$0 company workorders --startDays=7', 'Filter work orders started within the last 7 days')
     .example('$0 company workorders --hideIds', 'Hide raw ID fields in work order output')
-    .example('$0 company workorders --crews', 'Show work order names and crew columns only');
+    .example('$0 company workorders --crews', 'Show work order names and crew columns only')
+    .example('$0 company workorders --blockOutput', 'Show work orders as blocks instead of columns')
+    .example('$0 company workorders --debugWorkOrders', 'Print raw work order JSON for debugging');
 }
 
 type CompanyCommand = (typeof builder) extends BuilderCallback<CommonConfig, infer R> ? CommandModule<CommonConfig, R> : never;
@@ -382,17 +494,28 @@ export const companyCommand: CompanyCommand = {
           case 'work-orders':
           case 'work_orders': {
             const companyWorkOrders = await getCompanyWorkOrders(argv['companyId'], argv['apiKey'], argv['aircraftId']);
-            const filteredWorkOrders = filterWorkOrdersByAircraft(companyWorkOrders, argv['aircraftId']);
+            const filteredByAircraft = filterWorkOrdersByAircraft(companyWorkOrders, argv['aircraftId']);
+            const filteredById = filterWorkOrdersById(filteredByAircraft, argv['workOrderId']);
+            const filteredByTicking = filterWorkOrdersByTicking(filteredById, argv['isTicking']);
+            const filteredByTickSource = filterWorkOrdersByLastTickSource(filteredByTicking, argv['lastTickSource']);
+            const filteredWorkOrders = filterWorkOrdersByStartDays(filteredByTickSource, argv['startDays']);
             const employeesById = argv['crews']
               ? buildEmployeesById(await api.getCompanyEmployees() as People[])
               : {};
 
             if (filteredWorkOrders.length) {
+              if (argv['debugWorkOrders']) {
+                log(chalk.yellowBright.bold('Raw Work Orders Debug\n'));
+                log(JSON.stringify(filteredWorkOrders, null, 2));
+                log('');
+              }
+
               log(chalk.greenBright.bold('Your Work Orders\n'));
               logCompanyWorkOrders(filteredWorkOrders, {
                 crews: argv['crews'],
                 hideIds: argv['hideIds'],
                 employeesById,
+                blockOutput: argv['blockOutput'],
               });
 
               if (argv['csv']) {
@@ -408,7 +531,15 @@ export const companyCommand: CompanyCommand = {
               }
             } else {
               log(
-                argv['aircraftId']
+                argv['workOrderId']
+                  ? `No work orders found for work order "${argv['workOrderId']}" ` + chalk.magentaBright('✈')
+                  : typeof argv['isTicking'] !== 'undefined'
+                  ? `No work orders found for IsTicking=${argv['isTicking']}` + ' ' + chalk.magentaBright('✈')
+                  : argv['lastTickSource']
+                  ? `No work orders found for last tick source "${argv['lastTickSource']}" ` + chalk.magentaBright('✈')
+                  : typeof argv['startDays'] !== 'undefined'
+                  ? `No work orders found started within the last ${argv['startDays']} day(s) ` + chalk.magentaBright('✈')
+                  : argv['aircraftId']
                   ? `No work orders found for aircraft "${argv['aircraftId']}" ` + chalk.magentaBright('✈')
                   : 'No work orders found ' + chalk.magentaBright('✈')
               );

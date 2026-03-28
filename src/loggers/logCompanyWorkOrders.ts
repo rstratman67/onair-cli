@@ -8,6 +8,7 @@ interface WorkOrderDisplayOptions {
   crews?: boolean;
   hideIds?: boolean;
   employeesById?: Record<string, string>;
+  blockOutput?: boolean;
 }
 
 const normalizeId = (value: string): string => {
@@ -177,6 +178,20 @@ export const logCompanyWorkOrders = (
   options: WorkOrderDisplayOptions = {}
 ): void => {
   const rows = getCompanyWorkOrderRows(companyWorkOrders, options);
+  if (options.blockOutput) {
+    rows.forEach((row, index) => {
+      Object.entries(row).forEach(([key, value]) => {
+        console.log(`${formatHeading(key)}: ${formatValue(value)}`);
+      });
+
+      if (index < rows.length - 1) {
+        console.log('###');
+      }
+    });
+
+    return;
+  }
+
   const keys = Array.from(
     rows.reduce((acc, item) => {
       Object.keys(item).forEach((key) => acc.add(key));

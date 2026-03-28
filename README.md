@@ -130,6 +130,20 @@ Optionally filter by aircraft ID or identifier.
 
 `onair-cli company workorders --aircraftId=N123AB`
 
+Optionally filter by work order ID.
+
+`onair-cli company workorders --workOrderId=<id>`
+
+Optionally filter by `IsTicking` or `LastTickSource`.
+
+`onair-cli company workorders --isTicking`
+
+`onair-cli company workorders --lastTickSource=Aircraft`
+
+Optionally filter by work orders started within the last N days using the work order `StartDate`.
+
+`onair-cli company workorders --startDays=7`
+
 Optionally hide raw ID fields and keep the readable object values in the table.
 
 `onair-cli company workorders --hideIds`
@@ -137,6 +151,14 @@ Optionally hide raw ID fields and keep the readable object values in the table.
 Crew details are hidden by default. Use `--crews` to show only the work order name plus one human-readable column per crew.
 
 `onair-cli company workorders --crews`
+
+Use `--blockOutput` to print each work order as `Field: Value` rows with `###` between records.
+
+`onair-cli company workorders --blockOutput`
+
+Use `--debugWorkOrders` to print the raw work order JSON and inspect fields like `Actions`.
+
+`onair-cli company workorders --debugWorkOrders`
 
 ### Flight
 
