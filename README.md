@@ -80,6 +80,16 @@ List your company's pending jobs
 
 `onair-cli company jobs`
 
+### Company Trading Goods
+
+List your company's trading goods.
+
+`onair-cli company trading-goods`
+
+Optionally filter by `MerchandiseType.Name`. Results are sorted by `CurrentAirport.ICAO`.
+
+`onair-cli company trading-goods --merchandiseType=Water`
+
 ### Flight
 
 Display flight data and airport info for a completed flight. In-progress or aborted flights are not supported.

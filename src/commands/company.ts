@@ -8,27 +8,84 @@ import { logCompany } from '../loggers/logCompany';
 import { logCompanyFleet } from '../loggers/logCompanyFleet';
 import { logCompanyFbos } from '../loggers/logCompanyFbos';
 import { logCompanyJobs } from '../loggers/logCompanyJobs';
+import { CompanyTradingGood, getCompanyTradingGoods } from '../api/getCompanyTradingGoods';
+import { logCompanyTradingGoods } from '../loggers/logCompanyTradingGoods';
 
 const log = console.log;
+
+const getNestedStringValue = (value: unknown, path: string[]): string | undefined => {
+  let current: unknown = value;
+
+  for (const segment of path) {
+    if (typeof current !== 'object' || current === null || !(segment in current)) {
+      return undefined;
+    }
+
+    current = (current as Record<string, unknown>)[segment];
+  }
+
+  return typeof current === 'string' ? current : undefined;
+};
+
+const filterTradingGoods = (tradingGoods: CompanyTradingGood[], merchandiseTypeName?: string): CompanyTradingGood[] => {
+  if (!merchandiseTypeName) {
+    return tradingGoods;
+  }
+
+  const filterValue = merchandiseTypeName.toLocaleLowerCase();
+
+  return tradingGoods.filter((good) => {
+    const name = getNestedStringValue(good, ['MerchandiseType', 'Name']);
+    return typeof name === 'string' && name.toLocaleLowerCase().includes(filterValue);
+  });
+};
+
+const sortTradingGoodsByAirportIcao = <T extends Record<string, unknown>>(tradingGoods: T[]): T[] => {
+  return [...tradingGoods].sort((left, right) => {
+    const leftIcao = getNestedStringValue(left, ['CurrentAirport', 'ICAO']) || '';
+    const rightIcao = getNestedStringValue(right, ['CurrentAirport', 'ICAO']) || '';
+
+    if (!leftIcao && !rightIcao) {
+      return 0;
+    }
+
+    if (!leftIcao) {
+      return 1;
+    }
+
+    if (!rightIcao) {
+      return -1;
+    }
+
+    return leftIcao.localeCompare(rightIcao);
+  });
+};
 
 const builder = (yargs: yargs.Argv<CommonConfig>) => {
   return yargs
     .positional('action', {
       describe: 'Optional info to lookup from your company',
       type: 'string',
-      choices: ['fleet', 'flights', 'fbos', 'jobs'],
+      choices: ['fleet', 'flights', 'fbos', 'jobs', 'trading-goods', 'trading_goods'],
     })
     .option('page', {
       'describe': 'Page number (flights only)',
       'type': 'number',
       'alias': 'p',
     })
+    .option('merchandiseType', {
+      describe: 'Filter trading goods by MerchandiseType.Name',
+      type: 'string',
+      alias: 'm',
+    })
     .example('$0 company','Get summary information for your company')
     .example('$0 company fleet','List your aircraft')
     .example('$0 company flights','List your flights')
     .example('$0 company flights -p=2','List your flights, showing page 2')
     .example('$0 company fbos', 'List your FBOs')
-    .example('$0 company jobs', 'List your pending jobs');
+    .example('$0 company jobs', 'List your pending jobs')
+    .example('$0 company trading-goods', 'List your trading goods')
+    .example('$0 company trading-goods --merchandiseType=Water', 'Filter trading goods by merchandise type name');
 }
 
 type CompanyCommand = (typeof builder) extends BuilderCallback<CommonConfig, infer R> ? CommandModule<CommonConfig, R> : never;
@@ -106,6 +163,25 @@ export const companyCommand: CompanyCommand = {
               logCompanyJobs(companyJobs);
             } else {
               log('No pending jobs! ' + chalk.magentaBright('✈'))
+            }
+            break;
+          }
+
+          case 'trading-goods':
+          case 'trading_goods': {
+            const companyTradingGoods = await getCompanyTradingGoods(argv['companyId'], argv['apiKey']);
+            const filteredTradingGoods = filterTradingGoods(companyTradingGoods, argv['merchandiseType']);
+            const sortedTradingGoods = sortTradingGoodsByAirportIcao(filteredTradingGoods);
+
+            if (sortedTradingGoods.length) {
+              log(chalk.greenBright.bold('Your Trading Goods\n'));
+              logCompanyTradingGoods(sortedTradingGoods);
+            } else {
+              log(
+                argv['merchandiseType']
+                  ? `No trading goods found for merchandise type "${argv['merchandiseType']}" ` + chalk.magentaBright('✈')
+                  : 'No trading goods found ' + chalk.magentaBright('✈')
+              );
             }
             break;
           }
