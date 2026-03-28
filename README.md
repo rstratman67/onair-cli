@@ -82,6 +82,14 @@ List your company FBOs, including fuel, fuel selling status and tied down/hanger
 
 `onair-cli company fbos`
 
+Use `--fuelLow` to show only FBOs where 100LL or Jet fuel is below 10% capacity.
+
+`onair-cli company fbos --fuelLow`
+
+Use `--fuelHigh` to show only FBOs where 100LL or Jet fuel is above 100% capacity.
+
+`onair-cli company fbos --fuelHigh`
+
 ### Company Jobs
 
 List your company's pending jobs
@@ -107,6 +115,10 @@ List your company's trading goods.
 Optionally filter by `MerchandiseType.Name`. Results are sorted by `CurrentAirport.ICAO`.
 
 `onair-cli company trading-goods --merchandiseType=Water`
+
+Optionally hide raw ID fields while keeping readable nested values.
+
+`onair-cli company trading-goods --hideIds`
 
 ### Company Work Orders
 

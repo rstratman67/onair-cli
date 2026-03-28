@@ -3,6 +3,10 @@ import chalk from 'chalk';
 import { CompanyTradingGood } from '../api/getCompanyTradingGoods';
 import { cliTable } from '../utils/cli-table';
 
+interface TradingGoodsDisplayOptions {
+  hideIds?: boolean;
+}
+
 const formatHeading = (key: string): string => {
   return key
     .replace(/([a-z0-9])([A-Z])/g, '$1 $2')
@@ -34,6 +38,10 @@ const formatValue = (value: unknown): string => {
       return `${record['Name']}`;
     }
 
+    if (typeof record['Identifier'] === 'string') {
+      return `${record['Identifier']}`;
+    }
+
     if (typeof record['ICAO'] === 'string') {
       return `${record['ICAO']}`;
     }
@@ -48,9 +56,33 @@ const formatValue = (value: unknown): string => {
   return `${value}`;
 };
 
-export const logCompanyTradingGoods = (companyTradingGoods: CompanyTradingGood[]): void => {
+const isIdField = (key: string): boolean => {
+  return /(?:^|_|\.)ids?$/i.test(key) || /Id$/i.test(key);
+};
+
+export const getCompanyTradingGoodsRows = (
+  companyTradingGoods: CompanyTradingGood[],
+  { hideIds = false }: TradingGoodsDisplayOptions = {}
+): Record<string, unknown>[] => {
+  return companyTradingGoods.map((good) => {
+    return Object.entries(good).reduce((row, [key, value]) => {
+      if (hideIds && isIdField(key)) {
+        return row;
+      }
+
+      row[key] = value;
+      return row;
+    }, {} as Record<string, unknown>);
+  });
+};
+
+export const logCompanyTradingGoods = (
+  companyTradingGoods: CompanyTradingGood[],
+  options: TradingGoodsDisplayOptions = {}
+): void => {
+  const rows = getCompanyTradingGoodsRows(companyTradingGoods, options);
   const keys = Array.from(
-    companyTradingGoods.reduce((acc, item) => {
+    rows.reduce((acc, item) => {
       Object.keys(item).forEach((key) => acc.add(key));
       return acc;
     }, new Set<string>())
@@ -59,8 +91,8 @@ export const logCompanyTradingGoods = (companyTradingGoods: CompanyTradingGood[]
   const tradingGoodsTable = cliTable();
   tradingGoodsTable.push(keys.map((key) => chalk.green(formatHeading(key))));
 
-  companyTradingGoods.forEach((good) => {
-    tradingGoodsTable.push(keys.map((key) => formatValue(good[key])));
+  rows.forEach((row) => {
+    tradingGoodsTable.push(keys.map((key) => formatValue(row[key])));
   });
 
   console.log(tradingGoodsTable.toString());

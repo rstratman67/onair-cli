@@ -10,7 +10,7 @@ import { logCompanyFbos } from '../loggers/logCompanyFbos';
 import { logCompanyJobs } from '../loggers/logCompanyJobs';
 import { logCompanyEmployees } from '../loggers/logCompanyEmployees';
 import { CompanyTradingGood, getCompanyTradingGoods } from '../api/getCompanyTradingGoods';
-import { logCompanyTradingGoods } from '../loggers/logCompanyTradingGoods';
+import { getCompanyTradingGoodsRows, logCompanyTradingGoods } from '../loggers/logCompanyTradingGoods';
 import { CompanyWorkOrder, getCompanyWorkOrders } from '../api/getCompanyWorkOrders';
 import { buildEmployeesById, getCompanyWorkOrderRows, logCompanyWorkOrders } from '../loggers/logCompanyWorkOrders';
 import { keyValueRows, writeCsvSections } from '../utils/csv';
@@ -105,6 +105,28 @@ const filterEmployeesByType = (employees: People[], employeeType?: string): Peop
   });
 };
 
+const hasLowFuel = (fbo: Fbo): boolean => {
+  const fuelRatios = [
+    fbo.Fuel100LLCapacity > 0 ? fbo.Fuel100LLQuantity / fbo.Fuel100LLCapacity : undefined,
+    fbo.FuelJetCapacity > 0 ? fbo.FuelJetQuantity / fbo.FuelJetCapacity : undefined,
+  ];
+
+  return fuelRatios.some((ratio) => typeof ratio === 'number' && ratio < 0.1);
+};
+
+const hasHighFuel = (fbo: Fbo): boolean => {
+  const fuelRatios = [
+    fbo.Fuel100LLCapacity > 0 ? fbo.Fuel100LLQuantity / fbo.Fuel100LLCapacity : 0,
+    fbo.FuelJetCapacity > 0 ? fbo.FuelJetQuantity / fbo.FuelJetCapacity : 0,
+  ];
+
+  return fuelRatios.some((ratio) => ratio > 1);
+};
+
+const sortFbosByIcao = (fbos: Fbo[]): Fbo[] => {
+  return [...fbos].sort((left, right) => left.Airport.ICAO.localeCompare(right.Airport.ICAO));
+};
+
 const builder = (yargs: yargs.Argv<CommonConfig>) => {
   return yargs
     .positional('action', {
@@ -142,17 +164,30 @@ const builder = (yargs: yargs.Argv<CommonConfig>) => {
       type: 'string',
       alias: 't',
     })
+    .option('fuelLow', {
+      describe: 'Show only FBOs with fuel below 10%',
+      type: 'boolean',
+      default: false,
+    })
+    .option('fuelHigh', {
+      describe: 'Show only FBOs with fuel above 100%',
+      type: 'boolean',
+      default: false,
+    })
     .example('$0 company','Get summary information for your company')
     .example('$0 company fleet','List your aircraft')
     .example('$0 company flights','List your flights')
     .example('$0 company flights -p=2','List your flights, showing page 2')
     .example('$0 company fbos', 'List your FBOs')
+    .example('$0 company fbos --fuelLow', 'Show only FBOs with low fuel')
+    .example('$0 company fbos --fuelHigh', 'Show only FBOs with over-capacity fuel')
     .example('$0 company jobs', 'List your pending jobs')
     .example('$0 company employees', 'List your company employees')
     .example('$0 company employees --employeeType=pilot', 'Filter company employees by type')
     .example('$0 company employees --employeeType=mechanic', 'Filter company employees by mechanic/attendant/pilot')
     .example('$0 company trading-goods', 'List your trading goods')
     .example('$0 company trading-goods --merchandiseType=Water', 'Filter trading goods by merchandise type name')
+    .example('$0 company trading-goods --hideIds', 'Hide raw ID fields in trading goods output')
     .example('$0 company workorders', 'List your company work orders')
     .example('$0 company workorders --aircraftId=N123AB', 'Filter work orders by aircraft')
     .example('$0 company workorders --hideIds', 'Hide raw ID fields in work order output')
@@ -237,19 +272,34 @@ export const companyCommand: CompanyCommand = {
 
           case 'fbos': {
             const companyFbos: Fbo[] = await api.getCompanyFbos();
+            const filteredFbos = companyFbos.filter((fbo) => {
+              if (!argv['fuelLow'] && !argv['fuelHigh']) {
+                return true;
+              }
+
+              const lowMatch = argv['fuelLow'] ? hasLowFuel(fbo) : false;
+              const highMatch = argv['fuelHigh'] ? hasHighFuel(fbo) : false;
+
+              return lowMatch || highMatch;
+            });
+            const sortedFbos = sortFbosByIcao(filteredFbos);
             
-            if (companyFbos.length) {
+            if (sortedFbos.length) {
               log(chalk.greenBright.bold('Your FBOs\n'));
-              logCompanyFbos(companyFbos);
+              logCompanyFbos(sortedFbos);
 
               if (argv['csv']) {
                 const files = writeCsvSections(argv['csv'], [
-                  { name: 'company_fbos', rows: companyFbos as unknown as Record<string, unknown>[] }
+                  { name: 'company_fbos', rows: sortedFbos as unknown as Record<string, unknown>[] }
                 ]);
                 files.forEach((file) => log(`CSV written: ${file}`));
               }
             } else {
-              log('No FBO... no 100LL! ' + chalk.magentaBright('✈'))
+              log(
+                argv['fuelLow'] || argv['fuelHigh']
+                  ? 'No matching FBO fuel conditions found ' + chalk.magentaBright('✈')
+                  : 'No FBO... no 100LL! ' + chalk.magentaBright('✈')
+              )
             }
             break;  
           }
@@ -305,11 +355,16 @@ export const companyCommand: CompanyCommand = {
 
             if (sortedTradingGoods.length) {
               log(chalk.greenBright.bold('Your Trading Goods\n'));
-              logCompanyTradingGoods(sortedTradingGoods);
+              logCompanyTradingGoods(sortedTradingGoods, {
+                hideIds: argv['hideIds'],
+              });
 
               if (argv['csv']) {
+                const tradingGoodsRows = getCompanyTradingGoodsRows(sortedTradingGoods, {
+                  hideIds: argv['hideIds'],
+                });
                 const files = writeCsvSections(argv['csv'], [
-                  { name: 'company_trading_goods', rows: sortedTradingGoods as unknown as Record<string, unknown>[] }
+                  { name: 'company_trading_goods', rows: tradingGoodsRows }
                 ]);
                 files.forEach((file) => log(`CSV written: ${file}`));
               }

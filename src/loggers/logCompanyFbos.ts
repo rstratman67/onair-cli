@@ -5,6 +5,9 @@ import { cliTable } from "../utils/cli-table";
 
 export const logCompanyFbos = (companyFbos: Fbo[]): void => {
   const fboTable = cliTable();
+  const formatFuel = (quantity: number, capacity: number): string => {
+    return `${Math.floor(quantity)}/${Math.floor(capacity)}`;
+  };
 
   fboTable.push([
     chalk.green('Airport'),
@@ -23,9 +26,9 @@ export const logCompanyFbos = (companyFbos: Fbo[]): void => {
     fboTable.push([
       Fbo.Airport.ICAO,
       Fbo.Name,
-      Fbo.Fuel100LLQuantity + '/' + Fbo.Fuel100LLCapacity,
+      formatFuel(Fbo.Fuel100LLQuantity, Fbo.Fuel100LLCapacity),
       Fbo.AllowFuel100LLSelling ? `✅ ${Fbo.Fuel100LLSellPrice}` : '❌',
-      Fbo.FuelJetQuantity + '/' + Fbo.FuelJetCapacity,
+      formatFuel(Fbo.FuelJetQuantity, Fbo.FuelJetCapacity),
       Fbo.AllowFuelJetSelling ? `✅ ${Fbo.FuelJetSellPrice}` : '❌',
       Fbo.CargoWeightCapacity,
       Fbo.SleepingCapacity,
