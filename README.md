@@ -88,6 +88,16 @@ List your company's pending jobs
 
 `onair-cli company jobs`
 
+### Company Employees
+
+List your company's employees.
+
+`onair-cli company employees`
+
+Optionally filter by employee type/category.
+
+`onair-cli company employees --employeeType=pilot`
+
 ### Company Trading Goods
 
 List your company's trading goods.
@@ -97,6 +107,24 @@ List your company's trading goods.
 Optionally filter by `MerchandiseType.Name`. Results are sorted by `CurrentAirport.ICAO`.
 
 `onair-cli company trading-goods --merchandiseType=Water`
+
+### Company Work Orders
+
+List your company's work orders.
+
+`onair-cli company workorders`
+
+Optionally filter by aircraft ID or identifier.
+
+`onair-cli company workorders --aircraftId=N123AB`
+
+Optionally hide raw ID fields and keep the readable object values in the table.
+
+`onair-cli company workorders --hideIds`
+
+Crew details are hidden by default. Use `--crews` to show only the work order name plus one human-readable column per crew.
+
+`onair-cli company workorders --crews`
 
 ### Flight
 
@@ -129,6 +157,12 @@ Get summary information for a given virtual airline. **Note:** You must specify 
 Shows the members of a given VA and their associated details. The role name and color will match with whatever OnAir reports.
 
 `onair-cli va members`
+
+### (VA) Virtual Airline Employees
+
+Alias for the VA members list.
+
+`onair-cli va employees`
 
 ### Save Credentials
 

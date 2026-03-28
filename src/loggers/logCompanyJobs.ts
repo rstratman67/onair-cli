@@ -39,34 +39,37 @@ export const logCompanyJobs = (companyJobs: Job[]): void => {
     return output
   }
 
+  const findMatchingAirport = (
+    leg: {
+      DepartureAirportId?: string;
+      DepartureAirport?: Airport;
+      CurrentAirportId?: string;
+      CurrentAirport?: Airport;
+      DestinationAirportId?: string;
+      DestinationAirport?: Airport;
+    },
+    airportId: string
+  ): Airport | undefined => {
+    if (leg.DepartureAirportId === airportId) {
+      return leg.DepartureAirport;
+    }
+
+    if (leg.CurrentAirportId === airportId) {
+      return leg.CurrentAirport;
+    }
+
+    if (leg.DestinationAirportId === airportId) {
+      return leg.DestinationAirport;
+    }
+
+    return undefined;
+  }
+
   companyJobs.forEach((job) => {
     // determine BaseAirport by matching BaseAirportId up within cargo or charter arrays
-    let baseAirport: Airport | undefined;
-
-    if (job.Cargos.length > 0) {
-      // iterate over Cargos array and find baseAirport
-      job.Cargos.find((e) => {
-          if (e.DepartureAirport.Id === job.BaseAirportId) {
-              baseAirport = e.DepartureAirport
-          } else if (e.CurrentAirport.Id === job.BaseAirportId) {
-              baseAirport = e.CurrentAirport
-          }else if (e.DestinationAirport.Id === job.BaseAirportId) {
-              baseAirport = e.DestinationAirport
-          }
-      })
-    }
-
-    if (job.Charters.length > 0) {
-        job.Charters.find((e) => {
-          if (e.DepartureAirport.Id === job.BaseAirportId) {
-            baseAirport = e.DepartureAirport
-        } else if (e.CurrentAirport.Id === job.BaseAirportId) {
-            baseAirport = e.CurrentAirport
-        }else if (e.DestinationAirport.Id === job.BaseAirportId) {
-            baseAirport = e.DestinationAirport
-        }
-      })
-    }
+    const baseAirport =
+      job.Cargos.map((cargo) => findMatchingAirport(cargo, job.BaseAirportId)).find((airport) => typeof airport !== 'undefined') ||
+      job.Charters.map((charter) => findMatchingAirport(charter, job.BaseAirportId)).find((airport) => typeof airport !== 'undefined');
 
     // build Job row
     // Description

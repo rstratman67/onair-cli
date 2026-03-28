@@ -14,10 +14,11 @@ const builder = (yargs: yargs.Argv<CommonConfig>) => {
     .positional('action', {
       describe: 'Optional info to lookup from your virtual airline',
       type: 'string',
-      choices: ['members'],
+      choices: ['members', 'employees'],
     })
     .example('$0 va','Get summary information for your virtual airline')
-    .example('$0 va members','List the members of your virtual airline');
+    .example('$0 va members','List the members of your virtual airline')
+    .example('$0 va employees','List the members of your virtual airline');
 }
 
 type VACommand = (typeof builder) extends BuilderCallback<CommonConfig, infer R> ? CommandModule<CommonConfig, R> : never;
@@ -49,11 +50,12 @@ export const vaCommand: VACommand = {
         }
       } else {
         switch (argv['action']) {
-          case 'members': {
+          case 'members':
+          case 'employees': {
             const va: VirtualAirline = await api.getVirtualAirline();
             const vaMembers: Member[] = await api.getVirtualAirlineMembers();
             if (vaMembers.length) {
-              log(chalk.greenBright.bold(`(${va.AirlineCode}) ${va.Name} Members\n`));
+              log(chalk.greenBright.bold(`(${va.AirlineCode}) ${va.Name} ${argv['action'] === 'employees' ? 'Employees' : 'Members'}\n`));
               
               logVirtualAirlineMembers(vaMembers);
 
