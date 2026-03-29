@@ -6,6 +6,10 @@ import { cliTable } from "../utils/cli-table";
 export const logCompanyJobs = (companyJobs: Job[]): void => {
   const jobTable = cliTable();
 
+  const getAirportIfMatchesBase = (airport: Airport | undefined, baseAirportId: string) => {
+    return airport?.Id === baseAirportId ? airport : undefined;
+  };
+
   jobTable.push([
     chalk.green('Job Type'),
     chalk.green('Description'),
@@ -41,30 +45,28 @@ export const logCompanyJobs = (companyJobs: Job[]): void => {
 
   companyJobs.forEach((job) => {
     // determine BaseAirport by matching BaseAirportId up within cargo or charter arrays
-    let baseAirport: Airport | undefined;
+    let baseAirport: Airport | undefined = (job as Job & { BaseAirport?: Airport }).BaseAirport;
 
-    if (job.Cargos.length > 0) {
+    if (!baseAirport && job.Cargos.length > 0) {
       // iterate over Cargos array and find baseAirport
       job.Cargos.find((e) => {
-          if (e.DepartureAirport.Id === job.BaseAirportId) {
-              baseAirport = e.DepartureAirport
-          } else if (e.CurrentAirport.Id === job.BaseAirportId) {
-              baseAirport = e.CurrentAirport
-          }else if (e.DestinationAirport.Id === job.BaseAirportId) {
-              baseAirport = e.DestinationAirport
-          }
+          baseAirport =
+            getAirportIfMatchesBase(e.DepartureAirport, job.BaseAirportId)
+            || getAirportIfMatchesBase(e.CurrentAirport, job.BaseAirportId)
+            || getAirportIfMatchesBase(e.DestinationAirport, job.BaseAirportId);
+
+          return Boolean(baseAirport);
       })
     }
 
-    if (job.Charters.length > 0) {
+    if (!baseAirport && job.Charters.length > 0) {
         job.Charters.find((e) => {
-          if (e.DepartureAirport.Id === job.BaseAirportId) {
-            baseAirport = e.DepartureAirport
-        } else if (e.CurrentAirport.Id === job.BaseAirportId) {
-            baseAirport = e.CurrentAirport
-        }else if (e.DestinationAirport.Id === job.BaseAirportId) {
-            baseAirport = e.DestinationAirport
-        }
+          baseAirport =
+            getAirportIfMatchesBase(e.DepartureAirport, job.BaseAirportId)
+            || getAirportIfMatchesBase(e.CurrentAirport, job.BaseAirportId)
+            || getAirportIfMatchesBase(e.DestinationAirport, job.BaseAirportId);
+
+          return Boolean(baseAirport);
       })
     }
 
