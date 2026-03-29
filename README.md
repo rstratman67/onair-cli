@@ -62,6 +62,14 @@ List details of your company's fleet of aircraft.
 
 `onair-cli company fleet`
 
+Filter by aircraft type or airport, and optionally sort by aircraft type.
+
+`onair-cli company fleet --aircraft-type=airbus`
+
+`onair-cli company fleet --airport-icao=KJFK`
+
+`onair-cli company fleet --aircraft-type=airbus --airport-icao=KJFK --sort=aircraft-type`
+
 ### Company Flights
 
 List your company's aircraft flights.
@@ -83,6 +91,24 @@ List your company FBOs, including fuel, fuel selling status and tied down/hanger
 List your company's pending jobs
 
 `onair-cli company jobs`
+
+### Company Work Orders
+
+List your company's work orders.
+
+`onair-cli company work-orders`
+
+Optionally filter by aircraft ICAO.
+
+`onair-cli company work-orders --aircraft-icao=C172`
+
+Optionally show assigned crew with readable names.
+
+`onair-cli company work-orders --show-crew`
+
+Optionally show the work order ID.
+
+`onair-cli company work-orders --work-order-id`
 
 ### Flight
 

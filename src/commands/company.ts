@@ -2,6 +2,9 @@ import yargs, { BuilderCallback, CommandModule } from 'yargs';
 import chalk from 'chalk';
 import OnAirApi, { OnAirApiConfig, Company, Aircraft, Flight, Fbo, Job, IncomeStatement } from 'onair-api';
 
+import { getCompanyWorkOrders } from '../api/getCompanyWorkOrders';
+import { logCompanyWorkOrders, getWorkOrderAircraftIcao } from '../loggers/logCompanyWorkOrders';
+import { CompanyWorkOrder } from '../types/CompanyWorkOrder';
 import { CommonConfig } from '../utils/commonTypes';
 import { logFlights } from '../loggers/logFlights';
 import { logCompany } from '../loggers/logCompany';
@@ -17,7 +20,7 @@ const builder = (yargs: yargs.Argv<CommonConfig>) => {
     .positional('action', {
       describe: 'Optional info to lookup from your company',
       type: 'string',
-      choices: ['fleet', 'flights', 'fbos', 'jobs', 'income'],
+      choices: ['fleet', 'flights', 'fbos', 'jobs', 'income', 'work-orders'],
     })
     .option('page', {
       'describe': 'Page number (flights only)',
@@ -28,14 +31,48 @@ const builder = (yargs: yargs.Argv<CommonConfig>) => {
       'describe': 'Days to display (Income statement only)',
       'type': 'number',
     })
+    .option('aircraft-type', {
+      'describe': 'Filter fleet by aircraft type name (fleet only)',
+      'type': 'string',
+    })
+    .option('airport-icao', {
+      'describe': 'Filter fleet by current airport ICAO (fleet only)',
+      'type': 'string',
+    })
+    .option('sort', {
+      'describe': 'Sort fleet results',
+      'type': 'string',
+      'choices': ['aircraft-type'],
+    })
+    .option('aircraft-icao', {
+      'describe': 'Filter work orders by aircraft ICAO (work-orders only)',
+      'type': 'string',
+    })
+    .option('show-crew', {
+      'describe': 'Display assigned crew for work orders',
+      'type': 'boolean',
+      'default': false,
+    })
+    .option('work-order-id', {
+      'describe': 'Display work order IDs',
+      'type': 'boolean',
+      'default': false,
+    })
     .example('$0 company','Get summary information for your company')
     .example('$0 company fleet','List your aircraft')
+    .example('$0 company fleet --aircraft-type=airbus', 'List only matching aircraft types')
+    .example('$0 company fleet --airport-icao=KJFK', 'List only aircraft at an airport')
+    .example('$0 company fleet --sort=aircraft-type', 'Sort fleet by aircraft type')
     .example('$0 company flights','List your flights')
     .example('$0 company flights -p=2','List your flights, showing page 2')
     .example('$0 company fbos', 'List your FBOs')
     .example('$0 company jobs', 'List your pending jobs')
     .example('$0 company income', 'Display your company income statement summary')
-    .example('$0 company income --days=30', 'Display your statement summary for the last 30 days');
+    .example('$0 company income --days=30', 'Display your statement summary for the last 30 days')
+    .example('$0 company work-orders', 'List your company work orders')
+    .example('$0 company work-orders --aircraft-icao=C172', 'List work orders for one aircraft ICAO')
+    .example('$0 company work-orders --show-crew', 'List work orders with assigned crew names')
+    .example('$0 company work-orders --work-order-id', 'List work orders including the work order ID');
 }
 
 type CompanyCommand = (typeof builder) extends BuilderCallback<CommonConfig, infer R> ? CommandModule<CommonConfig, R> : never;
@@ -60,15 +97,42 @@ export const companyCommand: CompanyCommand = {
         switch (argv['action']) {
           case 'fleet': {
             const companyFleet: Aircraft[] = await api.getCompanyFleet();
-            if (companyFleet.length) {
+            const aircraftTypeFilter = typeof argv['aircraft-type'] === 'string'
+              ? argv['aircraft-type'].trim().toLocaleLowerCase()
+              : undefined;
+            const airportIcaoFilter = typeof argv['airport-icao'] === 'string'
+              ? argv['airport-icao'].trim().toLocaleUpperCase()
+              : undefined;
+
+            let filteredFleet = companyFleet.filter((aircraft) => {
+              const matchesAircraftType = aircraftTypeFilter
+                ? aircraft.AircraftType.DisplayName.toLocaleLowerCase().includes(aircraftTypeFilter)
+                : true;
+              const matchesAirportIcao = airportIcaoFilter
+                ? aircraft.CurrentAirport?.ICAO?.toLocaleUpperCase() === airportIcaoFilter
+                : true;
+
+              return matchesAircraftType && matchesAirportIcao;
+            });
+
+            if (argv['sort'] === 'aircraft-type') {
+              filteredFleet = [...filteredFleet].sort((a, b) => {
+                const typeSort = a.AircraftType.DisplayName.localeCompare(b.AircraftType.DisplayName);
+                return typeSort !== 0 ? typeSort : a.Identifier.localeCompare(b.Identifier);
+              });
+            }
+
+            if (filteredFleet.length) {
               log(chalk.greenBright.bold('Your fleet of aircraft\n'));
               
-              logCompanyFleet(companyFleet);
+              logCompanyFleet(filteredFleet);
               
               log(`\nSuggested command: ${argv['$0']} aircraft <aircraftId>`);
               log(`Suggested command: ${argv['$0']} flights <aircraftId>`);
             } else {
-              log('Dude, where\'s your aircraft?! ' + chalk.magentaBright('✈'));
+              log(companyFleet.length
+                ? 'No aircraft matched your fleet filters.'
+                : 'Dude, where\'s your aircraft?! ' + chalk.magentaBright('✈'));
             }
             break;
           } 
@@ -127,6 +191,32 @@ export const companyCommand: CompanyCommand = {
             const priorDateStr = new Date(priorDate).toISOString();
             const income: IncomeStatement = await api.getCompanyIncomeStatement(priorDateStr, currentDateStr);    
             logCompanyIncome(income, daysToDisplay);
+            break;
+          }
+
+          case 'work-orders': {
+            const workOrders: CompanyWorkOrder[] = await getCompanyWorkOrders(argv['companyId'], argv['apiKey']);
+            const aircraftIcaoFilter = typeof argv['aircraft-icao'] === 'string'
+              ? argv['aircraft-icao'].trim().toLocaleUpperCase()
+              : undefined;
+
+            const filteredWorkOrders = workOrders.filter((workOrder) => {
+              if (!aircraftIcaoFilter) {
+                return true;
+              }
+
+              return getWorkOrderAircraftIcao(workOrder)?.toLocaleUpperCase() === aircraftIcaoFilter;
+            });
+
+            if (filteredWorkOrders.length) {
+              log(chalk.greenBright.bold('Your work orders\n'));
+              logCompanyWorkOrders(filteredWorkOrders, argv['show-crew'], argv['work-order-id']);
+            } else {
+              log(workOrders.length
+                ? 'No work orders matched your aircraft ICAO filter.'
+                : 'No work orders found.');
+            }
+            break;
           }
         }
       }
