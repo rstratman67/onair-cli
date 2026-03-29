@@ -63,10 +63,43 @@ const getWorkOrderAircraftIdentifier = (workOrder: CompanyWorkOrder) => {
   ]);
 };
 
+const toArray = (value: unknown): unknown[] => {
+  return Array.isArray(value) ? value : [];
+};
+
+const hasActiveAction = (workOrder: CompanyWorkOrder) => {
+  const actions = toArray(workOrder.Actions);
+
+  return actions.some((actionValue) => {
+    const action = toRecord(actionValue);
+    const actionStatus = toNumberValue(action?.Status);
+
+    return Boolean(
+      action?.StartedTime
+      || action?.FlightId
+      || action?.CurrentFlightId
+      || actionStatus === 1
+    );
+  });
+};
+
 const getWorkOrderStatus = (workOrder: CompanyWorkOrder) => {
   const numericStatus = toNumberValue(workOrder.Status);
+  const aircraft = getAircraftRecord(workOrder);
+  const aircraftStatus = toNumberValue(aircraft?.AircraftStatus);
 
   if (typeof numericStatus !== 'undefined') {
+    if (
+      numericStatus === 1
+      && (
+        hasActiveAction(workOrder)
+        || workOrder.IsTicking === true
+        || aircraftStatus === 3
+      )
+    ) {
+      return 'In Progress';
+    }
+
     const mappedStatus = ({
       0: 'Inactive',
       1: 'Pending',
@@ -92,10 +125,6 @@ const getWorkOrderSummary = (workOrder: CompanyWorkOrder) => {
     workOrder.Title,
     workOrder.Category,
   ]);
-};
-
-const toArray = (value: unknown): unknown[] => {
-  return Array.isArray(value) ? value : [];
 };
 
 const getCrewDisplayName = (value: unknown): string | undefined => {
