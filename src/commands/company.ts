@@ -2,7 +2,9 @@ import yargs, { BuilderCallback, CommandModule } from 'yargs';
 import chalk from 'chalk';
 import OnAirApi, { OnAirApiConfig, Company, Aircraft, Flight, Fbo, Job, IncomeStatement } from 'onair-api';
 
+import { CompanyTradingGood, getCompanyTradingGoods } from '../api/getCompanyTradingGoods';
 import { getCompanyWorkOrders } from '../api/getCompanyWorkOrders';
+import { logCompanyTradingGoods } from '../loggers/logCompanyTradingGoods';
 import { logCompanyWorkOrders, getWorkOrderAircraftIcao } from '../loggers/logCompanyWorkOrders';
 import { CompanyWorkOrder } from '../types/CompanyWorkOrder';
 import { CommonConfig } from '../utils/commonTypes';
@@ -15,12 +17,81 @@ import { logCompanyIncome } from '../loggers/logCompanyIncome';
 
 const log = console.log;
 
+const getNestedStringValue = (value: unknown, path: string[]): string | undefined => {
+  let current: unknown = value;
+
+  for (const segment of path) {
+    if (typeof current !== 'object' || current === null || !(segment in current)) {
+      return undefined;
+    }
+
+    current = (current as Record<string, unknown>)[segment];
+  }
+
+  return typeof current === 'string' ? current : undefined;
+};
+
+const filterTradingGoods = (tradingGoods: CompanyTradingGood[], merchandiseTypeName?: string): CompanyTradingGood[] => {
+  if (!merchandiseTypeName) {
+    return tradingGoods;
+  }
+
+  const filterValue = merchandiseTypeName.toLocaleLowerCase();
+
+  return tradingGoods.filter((good) => {
+    const name = getNestedStringValue(good, ['MerchandiseType', 'Name']);
+    return typeof name === 'string' && name.toLocaleLowerCase().includes(filterValue);
+  });
+};
+
+const filterTradingGoodsByAirportIcao = (tradingGoods: CompanyTradingGood[], airportIcao?: string): CompanyTradingGood[] => {
+  if (!airportIcao) {
+    return tradingGoods;
+  }
+
+  const filterValue = airportIcao.toLocaleUpperCase();
+
+  return tradingGoods.filter((good) => {
+    const icao = getNestedStringValue(good, ['CurrentAirport', 'ICAO']);
+    return typeof icao === 'string' && icao.toLocaleUpperCase() === filterValue;
+  });
+};
+
+const sortTradingGoodsByAirportIcao = <T extends Record<string, unknown>>(tradingGoods: T[]): T[] => {
+  return [...tradingGoods].sort((left, right) => {
+    const leftIcao = getNestedStringValue(left, ['CurrentAirport', 'ICAO']) || '';
+    const rightIcao = getNestedStringValue(right, ['CurrentAirport', 'ICAO']) || '';
+    const leftMerchandiseType = getNestedStringValue(left, ['MerchandiseType', 'Name']) || '';
+    const rightMerchandiseType = getNestedStringValue(right, ['MerchandiseType', 'Name']) || '';
+
+    if (!leftIcao && !rightIcao) {
+      return leftMerchandiseType.localeCompare(rightMerchandiseType);
+    }
+
+    if (!leftIcao) {
+      return 1;
+    }
+
+    if (!rightIcao) {
+      return -1;
+    }
+
+    const airportSort = leftIcao.localeCompare(rightIcao);
+
+    if (airportSort !== 0) {
+      return airportSort;
+    }
+
+    return leftMerchandiseType.localeCompare(rightMerchandiseType);
+  });
+};
+
 const builder = (yargs: yargs.Argv<CommonConfig>) => {
   return yargs
     .positional('action', {
       describe: 'Optional info to lookup from your company',
       type: 'string',
-      choices: ['fleet', 'flights', 'fbos', 'jobs', 'income', 'work-orders'],
+      choices: ['fleet', 'flights', 'fbos', 'jobs', 'income', 'work-orders', 'trading-goods', 'trading_goods'],
     })
     .option('page', {
       'describe': 'Page number (flights only)',
@@ -58,6 +129,25 @@ const builder = (yargs: yargs.Argv<CommonConfig>) => {
       'type': 'boolean',
       'default': false,
     })
+    .option('merchandiseType', {
+      describe: 'Filter trading goods by MerchandiseType.Name',
+      type: 'string',
+      alias: 'm',
+    })
+    .option('trading-airport-icao', {
+      describe: 'Filter trading goods by CurrentAirport.ICAO',
+      type: 'string',
+    })
+    .option('hide-ids', {
+      describe: 'Hide raw ID columns for trading goods',
+      type: 'boolean',
+      default: false,
+    })
+    .option('readable-ids', {
+      describe: 'Swap trading goods ID columns to readable values where possible',
+      type: 'boolean',
+      default: false,
+    })
     .example('$0 company','Get summary information for your company')
     .example('$0 company fleet','List your aircraft')
     .example('$0 company fleet --aircraft-type=airbus', 'List only matching aircraft types')
@@ -72,7 +162,12 @@ const builder = (yargs: yargs.Argv<CommonConfig>) => {
     .example('$0 company work-orders', 'List your company work orders')
     .example('$0 company work-orders --aircraft-icao=C172', 'List work orders for one aircraft ICAO')
     .example('$0 company work-orders --show-crew', 'List work orders with assigned crew names')
-    .example('$0 company work-orders --work-order-id', 'List work orders including the work order ID');
+    .example('$0 company work-orders --work-order-id', 'List work orders including the work order ID')
+    .example('$0 company trading-goods', 'List your trading goods')
+    .example('$0 company trading_goods --merchandiseType=Water', 'Filter trading goods by merchandise type name')
+    .example('$0 company trading_goods --trading-airport-icao=KJFK', 'Filter trading goods by airport ICAO')
+    .example('$0 company trading_goods --hide-ids', 'Hide raw ID columns for trading goods')
+    .example('$0 company trading_goods --readable-ids', 'Show human readable values instead of raw trading goods IDs');
 }
 
 type CompanyCommand = (typeof builder) extends BuilderCallback<CommonConfig, infer R> ? CommandModule<CommonConfig, R> : never;
@@ -215,6 +310,31 @@ export const companyCommand: CompanyCommand = {
               log(workOrders.length
                 ? 'No work orders matched your aircraft ICAO filter.'
                 : 'No work orders found.');
+            }
+            break;
+          }
+
+          case 'trading-goods':
+          case 'trading_goods': {
+            const companyTradingGoods = await getCompanyTradingGoods(argv['companyId'], argv['apiKey']);
+            const filteredTradingGoodsByMerchandiseType = filterTradingGoods(companyTradingGoods, argv['merchandiseType']);
+            const filteredTradingGoods = filterTradingGoodsByAirportIcao(
+              filteredTradingGoodsByMerchandiseType,
+              typeof argv['trading-airport-icao'] === 'string'
+                ? argv['trading-airport-icao'].trim()
+                : undefined
+            );
+            const sortedTradingGoods = sortTradingGoodsByAirportIcao(filteredTradingGoods);
+
+            if (sortedTradingGoods.length) {
+              log(chalk.greenBright.bold('Your Trading Goods\n'));
+              logCompanyTradingGoods(sortedTradingGoods, argv['hide-ids'], argv['readable-ids']);
+            } else {
+              log(
+                argv['merchandiseType'] || argv['trading-airport-icao']
+                  ? 'No trading goods found for the supplied filters.'
+                  : 'No trading goods found.'
+              );
             }
             break;
           }
