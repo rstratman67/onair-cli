@@ -110,6 +110,22 @@ Optionally show the work order ID.
 
 `onair-cli company work-orders --work-order-id`
 
+### Company Trading Goods
+
+List your company's trading goods.
+
+`onair-cli company trading-goods`
+
+`onair-cli company trading_goods`
+
+Optionally filter by merchandise type name.
+
+`onair-cli company trading_goods --merchandiseType=Water`
+
+Optionally filter by airport ICAO.
+
+`onair-cli company trading_goods --trading-airport-icao=KJFK`
+
 ### Flight
 
 Display flight data and airport info for a completed flight. In-progress or aborted flights are not supported.
