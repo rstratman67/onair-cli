@@ -3,11 +3,57 @@ import chalk from 'chalk';
 import { CompanyTradingGood } from '../api/getCompanyTradingGoods';
 import { cliTable } from '../utils/cli-table';
 
+const isIdKey = (key: string) => key.endsWith('Id');
+
+const getReadableObjectValue = (value: unknown): string | undefined => {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    return undefined;
+  }
+
+  const record = value as Record<string, unknown>;
+
+  if (typeof record['DisplayName'] === 'string') {
+    return `${record['DisplayName']}`;
+  }
+
+  if (typeof record['Identifier'] === 'string') {
+    return `${record['Identifier']}`;
+  }
+
+  if (typeof record['Name'] === 'string') {
+    return `${record['Name']}`;
+  }
+
+  if (typeof record['ICAO'] === 'string') {
+    return `${record['ICAO']}`;
+  }
+
+  if (typeof record['AirlineCode'] === 'string') {
+    return `${record['AirlineCode']}`;
+  }
+
+  return undefined;
+};
+
+const hasReadableIdReplacement = (items: CompanyTradingGood[], key: string) => {
+  const relatedObjectKey = key.slice(0, -2);
+
+  return items.some((item) => Boolean(getReadableObjectValue(item[relatedObjectKey])));
+};
+
 const formatHeading = (key: string): string => {
   return key
     .replace(/([a-z0-9])([A-Z])/g, '$1 $2')
     .replace(/_/g, ' ')
     .replace(/\b\w/g, (char) => char.toUpperCase());
+};
+
+const getColumnHeading = (key: string, readableIds = false) => {
+  if (readableIds && isIdKey(key)) {
+    return formatHeading(key.slice(0, -2));
+  }
+
+  return formatHeading(key);
 };
 
 const formatValue = (value: unknown): string => {
@@ -48,19 +94,63 @@ const formatValue = (value: unknown): string => {
   return `${value}`;
 };
 
-export const logCompanyTradingGoods = (companyTradingGoods: CompanyTradingGood[]): void => {
-  const keys = Array.from(
+const getTradingGoodsKeys = (
+  companyTradingGoods: CompanyTradingGood[],
+  hideIds = false,
+  readableIds = false
+) => {
+  const allKeys = Array.from(
     companyTradingGoods.reduce((acc, item) => {
       Object.keys(item).forEach((key) => acc.add(key));
       return acc;
     }, new Set<string>())
   );
 
+  return allKeys.filter((key) => {
+    if (hideIds && isIdKey(key)) {
+      return false;
+    }
+
+    if (readableIds && isIdKey(key) && !hasReadableIdReplacement(companyTradingGoods, key)) {
+      return false;
+    }
+
+    if (readableIds && !hideIds && !isIdKey(key)) {
+      const relatedIdKey = `${key}Id`;
+      if (allKeys.includes(relatedIdKey)) {
+        return false;
+      }
+    }
+
+    return true;
+  });
+};
+
+const getColumnValue = (good: CompanyTradingGood, key: string, readableIds = false) => {
+  if (readableIds && isIdKey(key)) {
+    const relatedObjectKey = key.slice(0, -2);
+    const readableValue = getReadableObjectValue(good[relatedObjectKey]);
+
+    if (readableValue) {
+      return readableValue;
+    }
+  }
+
+  return formatValue(good[key]);
+};
+
+export const logCompanyTradingGoods = (
+  companyTradingGoods: CompanyTradingGood[],
+  hideIds = false,
+  readableIds = false
+): void => {
+  const keys = getTradingGoodsKeys(companyTradingGoods, hideIds, readableIds);
+
   const tradingGoodsTable = cliTable();
-  tradingGoodsTable.push(keys.map((key) => chalk.green(formatHeading(key))));
+  tradingGoodsTable.push(keys.map((key) => chalk.green(getColumnHeading(key, readableIds))));
 
   companyTradingGoods.forEach((good) => {
-    tradingGoodsTable.push(keys.map((key) => formatValue(good[key])));
+    tradingGoodsTable.push(keys.map((key) => getColumnValue(good, key, readableIds)));
   });
 
   console.log(tradingGoodsTable.toString());

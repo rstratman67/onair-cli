@@ -61,9 +61,11 @@ const sortTradingGoodsByAirportIcao = <T extends Record<string, unknown>>(tradin
   return [...tradingGoods].sort((left, right) => {
     const leftIcao = getNestedStringValue(left, ['CurrentAirport', 'ICAO']) || '';
     const rightIcao = getNestedStringValue(right, ['CurrentAirport', 'ICAO']) || '';
+    const leftMerchandiseType = getNestedStringValue(left, ['MerchandiseType', 'Name']) || '';
+    const rightMerchandiseType = getNestedStringValue(right, ['MerchandiseType', 'Name']) || '';
 
     if (!leftIcao && !rightIcao) {
-      return 0;
+      return leftMerchandiseType.localeCompare(rightMerchandiseType);
     }
 
     if (!leftIcao) {
@@ -74,7 +76,13 @@ const sortTradingGoodsByAirportIcao = <T extends Record<string, unknown>>(tradin
       return -1;
     }
 
-    return leftIcao.localeCompare(rightIcao);
+    const airportSort = leftIcao.localeCompare(rightIcao);
+
+    if (airportSort !== 0) {
+      return airportSort;
+    }
+
+    return leftMerchandiseType.localeCompare(rightMerchandiseType);
   });
 };
 
@@ -130,6 +138,16 @@ const builder = (yargs: yargs.Argv<CommonConfig>) => {
       describe: 'Filter trading goods by CurrentAirport.ICAO',
       type: 'string',
     })
+    .option('hide-ids', {
+      describe: 'Hide raw ID columns for trading goods',
+      type: 'boolean',
+      default: false,
+    })
+    .option('readable-ids', {
+      describe: 'Swap trading goods ID columns to readable values where possible',
+      type: 'boolean',
+      default: false,
+    })
     .example('$0 company','Get summary information for your company')
     .example('$0 company fleet','List your aircraft')
     .example('$0 company fleet --aircraft-type=airbus', 'List only matching aircraft types')
@@ -147,7 +165,9 @@ const builder = (yargs: yargs.Argv<CommonConfig>) => {
     .example('$0 company work-orders --work-order-id', 'List work orders including the work order ID')
     .example('$0 company trading-goods', 'List your trading goods')
     .example('$0 company trading_goods --merchandiseType=Water', 'Filter trading goods by merchandise type name')
-    .example('$0 company trading_goods --trading-airport-icao=KJFK', 'Filter trading goods by airport ICAO');
+    .example('$0 company trading_goods --trading-airport-icao=KJFK', 'Filter trading goods by airport ICAO')
+    .example('$0 company trading_goods --hide-ids', 'Hide raw ID columns for trading goods')
+    .example('$0 company trading_goods --readable-ids', 'Show human readable values instead of raw trading goods IDs');
 }
 
 type CompanyCommand = (typeof builder) extends BuilderCallback<CommonConfig, infer R> ? CommandModule<CommonConfig, R> : never;
@@ -308,7 +328,7 @@ export const companyCommand: CompanyCommand = {
 
             if (sortedTradingGoods.length) {
               log(chalk.greenBright.bold('Your Trading Goods\n'));
-              logCompanyTradingGoods(sortedTradingGoods);
+              logCompanyTradingGoods(sortedTradingGoods, argv['hide-ids'], argv['readable-ids']);
             } else {
               log(
                 argv['merchandiseType'] || argv['trading-airport-icao']

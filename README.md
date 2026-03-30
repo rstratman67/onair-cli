@@ -126,6 +126,12 @@ Optionally filter by airport ICAO.
 
 `onair-cli company trading_goods --trading-airport-icao=KJFK`
 
+Optionally hide raw IDs or swap them to readable values.
+
+`onair-cli company trading_goods --hide-ids`
+
+`onair-cli company trading_goods --readable-ids`
+
 ### Flight
 
 Display flight data and airport info for a completed flight. In-progress or aborted flights are not supported.
