@@ -127,6 +127,10 @@ const getTradingGoodsKeys = (
 };
 
 const getColumnValue = (good: CompanyTradingGood, key: string, readableIds = false) => {
+  if (key === 'InTransit') {
+    return Boolean(good['CurrentAircraftId'] || good['CurrentAircraft']) ? 'Yes' : 'No';
+  }
+
   if (readableIds && isIdKey(key)) {
     const relatedObjectKey = key.slice(0, -2);
     const readableValue = getReadableObjectValue(good[relatedObjectKey]);
@@ -139,12 +143,78 @@ const getColumnValue = (good: CompanyTradingGood, key: string, readableIds = fal
   return formatValue(good[key]);
 };
 
+const getLocationLabel = (good: CompanyTradingGood) => {
+  const currentAirport = getReadableObjectValue(good['CurrentAirport']);
+  const currentAircraft = getReadableObjectValue(good['CurrentAircraft']);
+
+  if (currentAirport) {
+    return currentAirport;
+  }
+
+  if (currentAircraft) {
+    return `Aircraft ${currentAircraft}`;
+  }
+
+  return '-';
+};
+
+export const logCompanyTradingGoodsSummary = (companyTradingGoods: CompanyTradingGood[]): void => {
+  const groupedTradingGoods = Array.from(
+    companyTradingGoods.reduce((acc, good) => {
+      const merchandiseType = getReadableObjectValue(good['MerchandiseType']) || '-';
+      const inTransit = Boolean(good['CurrentAircraftId'] || good['CurrentAircraft']) ? 'In Transit' : 'On Site';
+      const location = getLocationLabel(good);
+      const groupKey = `${location}__${merchandiseType}__${inTransit}`;
+      const quantity = Number(good['Quantity']) || 0;
+      const pricePerUnit = formatValue(good['PricePerUnit']) || '0';
+
+      if (!acc.has(groupKey)) {
+        acc.set(groupKey, {
+          location,
+          merchandiseType,
+          inTransit,
+          quantity: 0,
+          prices: new Set<string>(),
+        });
+      }
+
+      const existingGroup = acc.get(groupKey)!;
+      existingGroup.quantity += quantity;
+      existingGroup.prices.add(pricePerUnit);
+
+      return acc;
+    }, new Map<string, {
+      location: string;
+      merchandiseType: string;
+      inTransit: string;
+      quantity: number;
+      prices: Set<string>;
+    }>())
+  ).map(([, group]) => group);
+
+  const quantityWidth = groupedTradingGoods.reduce((maxWidth, group) => {
+    return Math.max(maxWidth, `${group.quantity}`.length);
+  }, 1);
+  const locationWidth = groupedTradingGoods.reduce((maxWidth, group) => {
+    return Math.max(maxWidth, group.location.length);
+  }, 1);
+
+  groupedTradingGoods.forEach((group) => {
+    const location = group.location.padEnd(locationWidth, ' ');
+    const quantity = `${group.quantity}`.padStart(quantityWidth, '0');
+    const prices = Array.from(group.prices);
+    const priceLabel = prices.length === 1 ? prices[0] : prices.join('/');
+
+    console.log(`${location} | ${quantity} | ${group.merchandiseType} | ${group.inTransit} | Price ${priceLabel}`);
+  });
+};
+
 export const logCompanyTradingGoods = (
   companyTradingGoods: CompanyTradingGood[],
   hideIds = false,
   readableIds = false
 ): void => {
-  const keys = getTradingGoodsKeys(companyTradingGoods, hideIds, readableIds);
+  const keys = ['InTransit', ...getTradingGoodsKeys(companyTradingGoods, hideIds, readableIds)];
 
   const tradingGoodsTable = cliTable();
   tradingGoodsTable.push(keys.map((key) => chalk.green(getColumnHeading(key, readableIds))));

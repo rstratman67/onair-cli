@@ -132,6 +132,10 @@ Optionally hide raw IDs or swap them to readable values.
 
 `onair-cli company trading_goods --readable-ids`
 
+Optionally show a one-line summary per trading good.
+
+`onair-cli company trading_goods --summary`
+
 ### Flight
 
 Display flight data and airport info for a completed flight. In-progress or aborted flights are not supported.

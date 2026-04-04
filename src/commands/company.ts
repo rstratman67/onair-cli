@@ -4,7 +4,7 @@ import OnAirApi, { OnAirApiConfig, Company, Aircraft, Flight, Fbo, Job, IncomeSt
 
 import { CompanyTradingGood, getCompanyTradingGoods } from '../api/getCompanyTradingGoods';
 import { getCompanyWorkOrders } from '../api/getCompanyWorkOrders';
-import { logCompanyTradingGoods } from '../loggers/logCompanyTradingGoods';
+import { logCompanyTradingGoods, logCompanyTradingGoodsSummary } from '../loggers/logCompanyTradingGoods';
 import { logCompanyWorkOrders, getWorkOrderAircraftIcao } from '../loggers/logCompanyWorkOrders';
 import { CompanyWorkOrder } from '../types/CompanyWorkOrder';
 import { CommonConfig } from '../utils/commonTypes';
@@ -137,6 +137,7 @@ const builder = (yargs: yargs.Argv<CommonConfig>) => {
     .option('trading-airport-icao', {
       describe: 'Filter trading goods by CurrentAirport.ICAO',
       type: 'string',
+      alias: 'trading-airport',
     })
     .option('hide-ids', {
       describe: 'Hide raw ID columns for trading goods',
@@ -145,6 +146,11 @@ const builder = (yargs: yargs.Argv<CommonConfig>) => {
     })
     .option('readable-ids', {
       describe: 'Swap trading goods ID columns to readable values where possible',
+      type: 'boolean',
+      default: false,
+    })
+    .option('summary', {
+      describe: 'Show a single-line summary for each trading good',
       type: 'boolean',
       default: false,
     })
@@ -167,7 +173,8 @@ const builder = (yargs: yargs.Argv<CommonConfig>) => {
     .example('$0 company trading_goods --merchandiseType=Water', 'Filter trading goods by merchandise type name')
     .example('$0 company trading_goods --trading-airport-icao=KJFK', 'Filter trading goods by airport ICAO')
     .example('$0 company trading_goods --hide-ids', 'Hide raw ID columns for trading goods')
-    .example('$0 company trading_goods --readable-ids', 'Show human readable values instead of raw trading goods IDs');
+    .example('$0 company trading_goods --readable-ids', 'Show human readable values instead of raw trading goods IDs')
+    .example('$0 company trading_goods --summary', 'Show a single-line summary for each trading good');
 }
 
 type CompanyCommand = (typeof builder) extends BuilderCallback<CommonConfig, infer R> ? CommandModule<CommonConfig, R> : never;
@@ -328,7 +335,11 @@ export const companyCommand: CompanyCommand = {
 
             if (sortedTradingGoods.length) {
               log(chalk.greenBright.bold('Your Trading Goods\n'));
-              logCompanyTradingGoods(sortedTradingGoods, argv['hide-ids'], argv['readable-ids']);
+              if (argv['summary']) {
+                logCompanyTradingGoodsSummary(sortedTradingGoods);
+              } else {
+                logCompanyTradingGoods(sortedTradingGoods, argv['hide-ids'], argv['readable-ids']);
+              }
             } else {
               log(
                 argv['merchandiseType'] || argv['trading-airport-icao']
