@@ -12,6 +12,7 @@ import { logFlights } from '../loggers/logFlights';
 import { logCompany } from '../loggers/logCompany';
 import { logCompanyFleet } from '../loggers/logCompanyFleet';
 import { logCompanyFbos } from '../loggers/logCompanyFbos';
+import { logCompanyFboJobs } from '../loggers/logCompanyFboJobs';
 import { logCompanyJobs } from '../loggers/logCompanyJobs';
 import { logCompanyIncome } from '../loggers/logCompanyIncome';
 
@@ -107,7 +108,7 @@ const builder = (yargs: yargs.Argv<CommonConfig>) => {
       'type': 'string',
     })
     .option('airport-icao', {
-      'describe': 'Filter fleet by current airport ICAO (fleet only)',
+      'describe': 'Filter fleet by current airport ICAO, or FBOs by airport ICAO',
       'type': 'string',
     })
     .option('sort', {
@@ -154,6 +155,11 @@ const builder = (yargs: yargs.Argv<CommonConfig>) => {
       type: 'boolean',
       default: false,
     })
+    .option('fbojobs', {
+      describe: 'Show FBO jobs grouped by airport and FBO name (fbos only)',
+      type: 'boolean',
+      default: false,
+    })
     .example('$0 company','Get summary information for your company')
     .example('$0 company fleet','List your aircraft')
     .example('$0 company fleet --aircraft-type=airbus', 'List only matching aircraft types')
@@ -162,6 +168,9 @@ const builder = (yargs: yargs.Argv<CommonConfig>) => {
     .example('$0 company flights','List your flights')
     .example('$0 company flights -p=2','List your flights, showing page 2')
     .example('$0 company fbos', 'List your FBOs')
+    .example('$0 company fbos --airport-icao=KJFK', 'List FBOs for one airport')
+    .example('$0 company fbos --fbojobs', 'List your FBOs with jobs grouped under each FBO')
+    .example('$0 company fbos --fbojobs --airport-icao=KJFK', 'List FBO jobs for one airport')
     .example('$0 company jobs', 'List your pending jobs')
     .example('$0 company income', 'Display your company income statement summary')
     .example('$0 company income --days=30', 'Display your statement summary for the last 30 days')
@@ -261,10 +270,26 @@ export const companyCommand: CompanyCommand = {
 
           case 'fbos': {
             const companyFbos: Fbo[] = await api.getCompanyFbos();
+            const airportIcaoFilter = typeof argv['airport-icao'] === 'string'
+              ? argv['airport-icao'].trim().toLocaleUpperCase()
+              : undefined;
+            const filteredFbos = companyFbos.filter((fbo) => {
+              return airportIcaoFilter
+                ? fbo.Airport?.ICAO?.toLocaleUpperCase() === airportIcaoFilter
+                : true;
+            });
             
-            if (companyFbos.length) {
-              log(chalk.greenBright.bold('Your FBOs\n'));
-              logCompanyFbos(companyFbos);
+            if (filteredFbos.length) {
+              if (argv['fbojobs']) {
+                const companyJobs: Job[] = await api.getCompanyJobs();
+                log(chalk.greenBright.bold('Your FBO Jobs\n'));
+                logCompanyFboJobs(filteredFbos, companyJobs);
+              } else {
+                log(chalk.greenBright.bold('Your FBOs\n'));
+                logCompanyFbos(filteredFbos);
+              }
+            } else if (companyFbos.length && airportIcaoFilter) {
+              log('No FBOs matched your airport ICAO filter.');
             } else {
               log('No FBO... no 100LL! ' + chalk.magentaBright('✈'))
             }
