@@ -100,6 +100,12 @@ Display your company's cashflow, including current cash, last report amount and 
 
 `onair-cli company cash-flow`
 
+Optionally show only payment entries, filtered by payment text such as Cargo or PAX.
+
+`onair-cli company cashflow --payment=Cargo`
+
+`onair-cli company cashflow --payment=PAX`
+
 ### Company Work Orders
 
 List your company's work orders.

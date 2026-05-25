@@ -15,7 +15,7 @@ import { logCompanyFbos } from '../loggers/logCompanyFbos';
 import { logCompanyFboJobs } from '../loggers/logCompanyFboJobs';
 import { logCompanyJobs } from '../loggers/logCompanyJobs';
 import { logCompanyIncome } from '../loggers/logCompanyIncome';
-import { logCompanyCashFlow } from '../loggers/logCompanyCashFlow';
+import { CashFlowPaymentEntry, logCompanyCashFlow, logCompanyCashFlowPayments } from '../loggers/logCompanyCashFlow';
 
 const log = console.log;
 
@@ -86,6 +86,23 @@ const sortTradingGoodsByAirportIcao = <T extends Record<string, unknown>>(tradin
 
     return leftMerchandiseType.localeCompare(rightMerchandiseType);
   });
+};
+
+const isPaymentEntry = (entry: CashFlowPaymentEntry, paymentFilter?: string): boolean => {
+  if (!entry.Description.toLocaleLowerCase().startsWith('payment for ')) {
+    return false;
+  }
+
+  return paymentFilter
+    ? entry.Description.toLocaleLowerCase().includes(paymentFilter.toLocaleLowerCase())
+    : true;
+};
+
+const getAircraftLookup = (aircraft: Aircraft[]): Record<string, string> => {
+  return aircraft.reduce((lookup, fleetAircraft) => {
+    lookup[fleetAircraft.Id] = fleetAircraft.Identifier;
+    return lookup;
+  }, {} as Record<string, string>);
 };
 
 const builder = (yargs: yargs.Argv<CommonConfig>) => {
@@ -161,6 +178,10 @@ const builder = (yargs: yargs.Argv<CommonConfig>) => {
       type: 'boolean',
       default: false,
     })
+    .option('payment', {
+      describe: 'Show cashflow payment entries, optionally filtered by text such as Cargo or PAX (cashflow only)',
+      type: 'string',
+    })
     .example('$0 company','Get summary information for your company')
     .example('$0 company fleet','List your aircraft')
     .example('$0 company fleet --aircraft-type=airbus', 'List only matching aircraft types')
@@ -176,6 +197,8 @@ const builder = (yargs: yargs.Argv<CommonConfig>) => {
     .example('$0 company income', 'Display your company income statement summary')
     .example('$0 company income --days=30', 'Display your statement summary for the last 30 days')
     .example('$0 company cashflow', 'Display your company cashflow')
+    .example('$0 company cashflow --payment=Cargo', 'Display cashflow payment entries matching Cargo')
+    .example('$0 company cashflow --payment=PAX', 'Display cashflow payment entries matching PAX')
     .example('$0 company work-orders', 'List your company work orders')
     .example('$0 company work-orders --aircraft-icao=C172', 'List work orders for one aircraft ICAO')
     .example('$0 company work-orders --show-crew', 'List work orders with assigned crew names')
@@ -326,7 +349,24 @@ export const companyCommand: CompanyCommand = {
           case 'cashflow':
           case 'cash-flow': {
             const cashFlow: CashFlow = await api.getCompanyCashFlow();
-            if (cashFlow.Entries.length) {
+            const paymentFilter = typeof argv['payment'] === 'string' && argv['payment'].trim()
+              ? argv['payment'].trim()
+              : undefined;
+
+            if (typeof argv['payment'] !== 'undefined') {
+              const paymentEntries = (cashFlow.Entries as CashFlowPaymentEntry[])
+                .filter((entry) => isPaymentEntry(entry, paymentFilter));
+
+              if (paymentEntries.length) {
+                const companyFleet: Aircraft[] = await api.getCompanyFleet();
+                log(chalk.greenBright.bold('Your cashflow payments\n'));
+                logCompanyCashFlowPayments(paymentEntries, getAircraftLookup(companyFleet));
+              } else {
+                log(paymentFilter
+                  ? `No cashflow payment entries matched "${paymentFilter}".`
+                  : 'No cashflow payment entries found.');
+              }
+            } else if (cashFlow.Entries.length) {
               log(chalk.greenBright.bold('Your cashflow\n'));
               logCompanyCashFlow(cashFlow);
             } else {

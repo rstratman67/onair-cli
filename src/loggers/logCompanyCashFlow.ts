@@ -3,6 +3,12 @@ import { CashFlow, CashFlowEntry } from "onair-api";
 
 import { cliTable } from "../utils/cli-table";
 
+export interface CashFlowPaymentEntry extends CashFlowEntry {
+  AircraftId?: string;
+}
+
+export type AircraftLookup = Record<string, string>;
+
 const formatMoney = (amount: number): string => {
   const formattedAmount = amount.toLocaleString('en-GB');
 
@@ -24,6 +30,12 @@ const getCarryForward = (entry: CashFlowEntry): string => {
     : cashFlowEntry.CarryFowarad;
 
   return carryForward ? 'Yes' : 'No';
+};
+
+const getPaymentType = (description: string): string => {
+  const match = description.match(/^Payment for ([^(\\.]+)/i);
+
+  return match ? match[1].trim() : 'Payment';
 };
 
 export const logCompanyCashFlow = (cashFlow: CashFlow): void => {
@@ -62,4 +74,28 @@ export const logCompanyCashFlow = (cashFlow: CashFlow): void => {
   });
 
   console.log(cashFlowTable.toString());
+};
+
+export const logCompanyCashFlowPayments = (
+  entries: CashFlowPaymentEntry[],
+  aircraftLookup: AircraftLookup = {}
+): void => {
+  const paymentTable = cliTable();
+  paymentTable.push([
+    chalk.green('Creation Date'),
+    chalk.green('Payment'),
+    chalk.green('Aircraft'),
+    chalk.green('Amount'),
+  ]);
+
+  entries.forEach((entry) => {
+    paymentTable.push([
+      formatDate(entry.CreationDate),
+      getPaymentType(entry.Description),
+      entry.AircraftId ? aircraftLookup[entry.AircraftId] || entry.AircraftId : '-',
+      formatMoney(entry.Amount),
+    ]);
+  });
+
+  console.log(paymentTable.toString());
 };
