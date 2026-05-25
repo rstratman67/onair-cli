@@ -1,6 +1,6 @@
 import yargs, { BuilderCallback, CommandModule } from 'yargs';
 import chalk from 'chalk';
-import OnAirApi, { OnAirApiConfig, Company, Aircraft, Flight, Fbo, Job, IncomeStatement } from 'onair-api';
+import OnAirApi, { OnAirApiConfig, Company, Aircraft, Flight, Fbo, Job, IncomeStatement, CashFlow } from 'onair-api';
 
 import { CompanyTradingGood, getCompanyTradingGoods } from '../api/getCompanyTradingGoods';
 import { getCompanyWorkOrders } from '../api/getCompanyWorkOrders';
@@ -15,6 +15,7 @@ import { logCompanyFbos } from '../loggers/logCompanyFbos';
 import { logCompanyFboJobs } from '../loggers/logCompanyFboJobs';
 import { logCompanyJobs } from '../loggers/logCompanyJobs';
 import { logCompanyIncome } from '../loggers/logCompanyIncome';
+import { logCompanyCashFlow } from '../loggers/logCompanyCashFlow';
 
 const log = console.log;
 
@@ -92,7 +93,7 @@ const builder = (yargs: yargs.Argv<CommonConfig>) => {
     .positional('action', {
       describe: 'Optional info to lookup from your company',
       type: 'string',
-      choices: ['fleet', 'flights', 'fbos', 'jobs', 'income', 'work-orders', 'trading-goods', 'trading_goods'],
+      choices: ['fleet', 'flights', 'fbos', 'jobs', 'income', 'cashflow', 'cash-flow', 'work-orders', 'trading-goods', 'trading_goods'],
     })
     .option('page', {
       'describe': 'Page number (flights only)',
@@ -174,6 +175,7 @@ const builder = (yargs: yargs.Argv<CommonConfig>) => {
     .example('$0 company jobs', 'List your pending jobs')
     .example('$0 company income', 'Display your company income statement summary')
     .example('$0 company income --days=30', 'Display your statement summary for the last 30 days')
+    .example('$0 company cashflow', 'Display your company cashflow')
     .example('$0 company work-orders', 'List your company work orders')
     .example('$0 company work-orders --aircraft-icao=C172', 'List work orders for one aircraft ICAO')
     .example('$0 company work-orders --show-crew', 'List work orders with assigned crew names')
@@ -318,6 +320,18 @@ export const companyCommand: CompanyCommand = {
             const priorDateStr = new Date(priorDate).toISOString();
             const income: IncomeStatement = await api.getCompanyIncomeStatement(priorDateStr, currentDateStr);    
             logCompanyIncome(income, daysToDisplay);
+            break;
+          }
+
+          case 'cashflow':
+          case 'cash-flow': {
+            const cashFlow: CashFlow = await api.getCompanyCashFlow();
+            if (cashFlow.Entries.length) {
+              log(chalk.greenBright.bold('Your cashflow\n'));
+              logCompanyCashFlow(cashFlow);
+            } else {
+              log('No cashflow entries found.');
+            }
             break;
           }
 

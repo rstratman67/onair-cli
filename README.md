@@ -92,6 +92,14 @@ List your company's pending jobs
 
 `onair-cli company jobs`
 
+### Company Cashflow
+
+Display your company's cashflow, including current cash, last report amount and cashflow entries.
+
+`onair-cli company cashflow`
+
+`onair-cli company cash-flow`
+
 ### Company Work Orders
 
 List your company's work orders.
