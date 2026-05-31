@@ -106,6 +106,12 @@ Optionally show only payment entries, filtered by payment text such as Cargo or 
 
 `onair-cli company cashflow --payment=PAX`
 
+Optionally show readable account names where available.
+
+`onair-cli company cashflow --readable-account-ids`
+
+`onair-cli company cashflow --payment=Cargo --readable-account-ids`
+
 ### Company Work Orders
 
 List your company's work orders.

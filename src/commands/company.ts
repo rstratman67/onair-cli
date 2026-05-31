@@ -1,6 +1,6 @@
 import yargs, { BuilderCallback, CommandModule } from 'yargs';
 import chalk from 'chalk';
-import OnAirApi, { OnAirApiConfig, Company, Aircraft, Flight, Fbo, Job, IncomeStatement, CashFlow } from 'onair-api';
+import OnAirApi, { OnAirApiConfig, Company, Aircraft, Flight, Fbo, Job, IncomeStatement, CashFlow, BalanceSheet, Account } from 'onair-api';
 
 import { CompanyTradingGood, getCompanyTradingGoods } from '../api/getCompanyTradingGoods';
 import { getCompanyWorkOrders } from '../api/getCompanyWorkOrders';
@@ -15,7 +15,7 @@ import { logCompanyFbos } from '../loggers/logCompanyFbos';
 import { logCompanyFboJobs } from '../loggers/logCompanyFboJobs';
 import { logCompanyJobs } from '../loggers/logCompanyJobs';
 import { logCompanyIncome } from '../loggers/logCompanyIncome';
-import { CashFlowPaymentEntry, logCompanyCashFlow, logCompanyCashFlowPayments } from '../loggers/logCompanyCashFlow';
+import { AccountLookup, CashFlowPaymentEntry, logCompanyCashFlow, logCompanyCashFlowPayments } from '../loggers/logCompanyCashFlow';
 
 const log = console.log;
 
@@ -98,11 +98,73 @@ const isPaymentEntry = (entry: CashFlowPaymentEntry, paymentFilter?: string): bo
     : true;
 };
 
-const getAircraftLookup = (aircraft: Aircraft[]): Record<string, string> => {
+const addAircraftToLookup = (lookup: Record<string, string>, aircraft: Aircraft[]): Record<string, string> => {
   return aircraft.reduce((lookup, fleetAircraft) => {
     lookup[fleetAircraft.Id] = fleetAircraft.Identifier;
     return lookup;
-  }, {} as Record<string, string>);
+  }, lookup);
+};
+
+const getAircraftIds = (entries: CashFlowPaymentEntry[]): string[] => {
+  return Array.from(new Set(entries
+    .map((entry) => entry.AircraftId)
+    .filter((aircraftId): aircraftId is string => typeof aircraftId === 'string' && Boolean(aircraftId))));
+};
+
+const getAircraftLookup = async (api: OnAirApi, entries: CashFlowPaymentEntry[]): Promise<Record<string, string>> => {
+  const lookup = addAircraftToLookup({}, await api.getCompanyFleet());
+  const missingAircraftIds = getAircraftIds(entries).filter((aircraftId) => !lookup[aircraftId]);
+  const batchSize = 10;
+
+  for (let index = 0; index < missingAircraftIds.length; index += batchSize) {
+    const aircraftBatch = missingAircraftIds.slice(index, index + batchSize);
+    const resolvedAircraft = await Promise.all(aircraftBatch.map(async (aircraftId) => {
+      try {
+        const aircraft = await api.getAircraft(aircraftId);
+        return { aircraftId, identifier: aircraft.Identifier };
+      } catch (e) {
+        return { aircraftId, identifier: aircraftId };
+      }
+    }));
+
+    resolvedAircraft.forEach((aircraft) => {
+      lookup[aircraft.aircraftId] = aircraft.identifier;
+    });
+  }
+
+  return lookup;
+};
+
+const getAccountLabel = (account: Account): string => {
+  return account.ShortName ? `${account.Name} (${account.ShortName})` : account.Name;
+};
+
+const addAccountsToLookup = (lookup: AccountLookup, accounts: Account[]): AccountLookup => {
+  accounts.forEach((account) => {
+    account.Entries.forEach((entry) => {
+      lookup[entry.AccountId] = getAccountLabel(account);
+
+      const entryAccount = Array.isArray(entry.Account) ? entry.Account[0] : entry.Account;
+      if (entryAccount?.Id) {
+        lookup[entryAccount.Id] = entryAccount.ShortName
+          ? `${entryAccount.Name} (${entryAccount.ShortName})`
+          : entryAccount.Name;
+      }
+    });
+  });
+
+  return lookup;
+};
+
+const getAccountLookup = (income: IncomeStatement, balanceSheet: BalanceSheet): AccountLookup => {
+  const lookup: AccountLookup = {};
+
+  addAccountsToLookup(lookup, income.REVAccounts);
+  addAccountsToLookup(lookup, income.EXPAccounts);
+  addAccountsToLookup(lookup, balanceSheet.ASSAccounts);
+  addAccountsToLookup(lookup, balanceSheet.LIAAccounts);
+
+  return lookup;
 };
 
 const builder = (yargs: yargs.Argv<CommonConfig>) => {
@@ -182,6 +244,11 @@ const builder = (yargs: yargs.Argv<CommonConfig>) => {
       describe: 'Show cashflow payment entries, optionally filtered by text such as Cargo or PAX (cashflow only)',
       type: 'string',
     })
+    .option('readable-account-ids', {
+      describe: 'Show cashflow account names where available instead of raw account IDs (cashflow only)',
+      type: 'boolean',
+      default: false,
+    })
     .example('$0 company','Get summary information for your company')
     .example('$0 company fleet','List your aircraft')
     .example('$0 company fleet --aircraft-type=airbus', 'List only matching aircraft types')
@@ -199,6 +266,7 @@ const builder = (yargs: yargs.Argv<CommonConfig>) => {
     .example('$0 company cashflow', 'Display your company cashflow')
     .example('$0 company cashflow --payment=Cargo', 'Display cashflow payment entries matching Cargo')
     .example('$0 company cashflow --payment=PAX', 'Display cashflow payment entries matching PAX')
+    .example('$0 company cashflow --readable-account-ids', 'Display cashflow with readable account names where available')
     .example('$0 company work-orders', 'List your company work orders')
     .example('$0 company work-orders --aircraft-icao=C172', 'List work orders for one aircraft ICAO')
     .example('$0 company work-orders --show-crew', 'List work orders with assigned crew names')
@@ -352,15 +420,29 @@ export const companyCommand: CompanyCommand = {
             const paymentFilter = typeof argv['payment'] === 'string' && argv['payment'].trim()
               ? argv['payment'].trim()
               : undefined;
+            const readableAccountIds = Boolean(argv['readable-account-ids']);
+            const cashFlowEntries = cashFlow.Entries as CashFlowPaymentEntry[];
+            const aircraftLookup = readableAccountIds || typeof argv['payment'] !== 'undefined'
+              ? await getAircraftLookup(api, cashFlowEntries)
+              : {};
+            let accountLookup: AccountLookup = {};
+
+            if (readableAccountIds) {
+              const currentDate = new Date();
+              const currentDateStr = currentDate.toISOString();
+              const priorDate = new Date().setDate(currentDate.getDate() - 30);
+              const priorDateStr = new Date(priorDate).toISOString();
+              const income: IncomeStatement = await api.getCompanyIncomeStatement(priorDateStr, currentDateStr);
+              const balanceSheet: BalanceSheet = await api.getCompanyBalanceSheet();
+              accountLookup = getAccountLookup(income, balanceSheet);
+            }
 
             if (typeof argv['payment'] !== 'undefined') {
-              const paymentEntries = (cashFlow.Entries as CashFlowPaymentEntry[])
-                .filter((entry) => isPaymentEntry(entry, paymentFilter));
+              const paymentEntries = cashFlowEntries.filter((entry) => isPaymentEntry(entry, paymentFilter));
 
               if (paymentEntries.length) {
-                const companyFleet: Aircraft[] = await api.getCompanyFleet();
                 log(chalk.greenBright.bold('Your cashflow payments\n'));
-                logCompanyCashFlowPayments(paymentEntries, getAircraftLookup(companyFleet));
+                logCompanyCashFlowPayments(paymentEntries, aircraftLookup, readableAccountIds, accountLookup);
               } else {
                 log(paymentFilter
                   ? `No cashflow payment entries matched "${paymentFilter}".`
@@ -368,7 +450,7 @@ export const companyCommand: CompanyCommand = {
               }
             } else if (cashFlow.Entries.length) {
               log(chalk.greenBright.bold('Your cashflow\n'));
-              logCompanyCashFlow(cashFlow);
+              logCompanyCashFlow(cashFlow, readableAccountIds, aircraftLookup, accountLookup);
             } else {
               log('No cashflow entries found.');
             }

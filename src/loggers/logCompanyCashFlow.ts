@@ -7,7 +7,18 @@ export interface CashFlowPaymentEntry extends CashFlowEntry {
   AircraftId?: string;
 }
 
+interface CashFlowAccount {
+  Id: string;
+  ShortName?: string;
+  Name?: string;
+}
+
+interface CashFlowEntryWithAccount extends CashFlowEntry {
+  Account?: CashFlowAccount | CashFlowAccount[];
+}
+
 export type AircraftLookup = Record<string, string>;
+export type AccountLookup = Record<string, string>;
 
 const formatMoney = (amount: number): string => {
   const formattedAmount = amount.toLocaleString('en-GB');
@@ -38,7 +49,35 @@ const getPaymentType = (description: string): string => {
   return match ? match[1].trim() : 'Payment';
 };
 
-export const logCompanyCashFlow = (cashFlow: CashFlow): void => {
+const getAircraftLabel = (entry: CashFlowPaymentEntry, aircraftLookup: AircraftLookup): string => {
+  return entry.AircraftId ? aircraftLookup[entry.AircraftId] || entry.AircraftId : '-';
+};
+
+const getAccountLabel = (entry: CashFlowEntry, accountLookup: AccountLookup = {}): string => {
+  const account = (entry as CashFlowEntryWithAccount).Account;
+  const accountValue = Array.isArray(account) ? account[0] : account;
+
+  if (accountValue?.Name && accountValue.ShortName) {
+    return `${accountValue.Name} (${accountValue.ShortName})`;
+  }
+
+  if (accountValue?.Name) {
+    return accountValue.Name;
+  }
+
+  if (accountValue?.ShortName) {
+    return accountValue.ShortName;
+  }
+
+  return accountLookup[entry.AccountId] || entry.AccountId;
+};
+
+export const logCompanyCashFlow = (
+  cashFlow: CashFlow,
+  readableAccountIds = false,
+  aircraftLookup: AircraftLookup = {},
+  accountLookup: AccountLookup = {}
+): void => {
   const summaryTable = cliTable();
 
   summaryTable.push([
@@ -60,6 +99,8 @@ export const logCompanyCashFlow = (cashFlow: CashFlow): void => {
   cashFlowTable.push([
     chalk.green('Date'),
     chalk.green('Description'),
+    ...(readableAccountIds ? [chalk.green('Aircraft')] : []),
+    ...(readableAccountIds ? [chalk.green('Account')] : []),
     chalk.green('Amount'),
     chalk.green('Carry Forward'),
   ]);
@@ -68,6 +109,8 @@ export const logCompanyCashFlow = (cashFlow: CashFlow): void => {
     cashFlowTable.push([
       formatDate(entry.CreationDate),
       entry.Description,
+      ...(readableAccountIds ? [getAircraftLabel(entry as CashFlowPaymentEntry, aircraftLookup)] : []),
+      ...(readableAccountIds ? [getAccountLabel(entry, accountLookup)] : []),
       formatMoney(entry.Amount),
       getCarryForward(entry),
     ]);
@@ -78,13 +121,16 @@ export const logCompanyCashFlow = (cashFlow: CashFlow): void => {
 
 export const logCompanyCashFlowPayments = (
   entries: CashFlowPaymentEntry[],
-  aircraftLookup: AircraftLookup = {}
+  aircraftLookup: AircraftLookup = {},
+  readableAccountIds = false,
+  accountLookup: AccountLookup = {}
 ): void => {
   const paymentTable = cliTable();
   paymentTable.push([
     chalk.green('Creation Date'),
     chalk.green('Payment'),
     chalk.green('Aircraft'),
+    ...(readableAccountIds ? [chalk.green('Account')] : []),
     chalk.green('Amount'),
   ]);
 
@@ -92,7 +138,8 @@ export const logCompanyCashFlowPayments = (
     paymentTable.push([
       formatDate(entry.CreationDate),
       getPaymentType(entry.Description),
-      entry.AircraftId ? aircraftLookup[entry.AircraftId] || entry.AircraftId : '-',
+      getAircraftLabel(entry, aircraftLookup),
+      ...(readableAccountIds ? [getAccountLabel(entry, accountLookup)] : []),
       formatMoney(entry.Amount),
     ]);
   });
