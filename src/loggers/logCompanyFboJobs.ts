@@ -8,6 +8,12 @@ export interface CompanyFboJobs {
   jobs: Job[];
 }
 
+interface DestinationSummary {
+  icao: string;
+  jobCount: number;
+  legCount: number;
+}
+
 type JobWithAirports = Job & {
   BaseAirport?: { ICAO?: string };
   MainAirport?: { ICAO?: string };
@@ -52,6 +58,37 @@ const getExpiresIn = (dateStr: string): string => {
 
 const getLegs = (job: Job): Array<Cargo | Charter> => {
   return [...job.Cargos, ...job.Charters];
+};
+
+const getDestinationSummaries = (jobs: Job[]): DestinationSummary[] => {
+  const destinationLookup: Record<string, { jobIds: Set<string>; legCount: number }> = {};
+
+  jobs.forEach((job) => {
+    getLegs(job).forEach((leg) => {
+      const icao = leg.DestinationAirport?.ICAO?.toLocaleUpperCase();
+      if (!icao) {
+        return;
+      }
+
+      destinationLookup[icao] = destinationLookup[icao] || { jobIds: new Set<string>(), legCount: 0 };
+      destinationLookup[icao].jobIds.add(job.Id);
+      destinationLookup[icao].legCount += 1;
+    });
+  });
+
+  return Object.entries(destinationLookup)
+    .map(([icao, summary]) => ({
+      icao,
+      jobCount: summary.jobIds.size,
+      legCount: summary.legCount,
+    }))
+    .sort((left, right) => {
+      if (right.jobCount !== left.jobCount) {
+        return right.jobCount - left.jobCount;
+      }
+
+      return left.icao.localeCompare(right.icao);
+    });
 };
 
 const formatNumber = (value: number): string => {
@@ -172,6 +209,39 @@ const getPayloadDescription = (routeGroups: RouteGroup[]): string => {
     .flatMap((group) => group.descriptions)
     .filter((description, index, descriptions) => descriptions.indexOf(description) === index)
     .join(', ');
+};
+
+export const logCompanyFboJobDestinations = (companyFboJobs: CompanyFboJobs[]): void => {
+  companyFboJobs.forEach(({ fbo, jobs }, index) => {
+    console.log(chalk.whiteBright.bold(`${fbo.Airport.ICAO} - ${fbo.Name}`));
+
+    const destinationSummaries = getDestinationSummaries(jobs);
+    if (!destinationSummaries.length) {
+      console.log(chalk.grey('No available destinations.\n'));
+      return;
+    }
+
+    const destinationTable = cliTable();
+    destinationTable.push([
+      chalk.green('Destination'),
+      chalk.green('Jobs'),
+      chalk.green('Legs'),
+    ]);
+
+    destinationSummaries.forEach((summary) => {
+      destinationTable.push([
+        summary.icao,
+        summary.jobCount,
+        summary.legCount,
+      ]);
+    });
+
+    console.log(destinationTable.toString());
+
+    if (index < companyFboJobs.length - 1) {
+      console.log('');
+    }
+  });
 };
 
 export const logCompanyFboJobs = (companyFboJobs: CompanyFboJobs[]): void => {

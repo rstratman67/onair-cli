@@ -16,7 +16,7 @@ import { logFlights } from '../loggers/logFlights';
 import { logCompany } from '../loggers/logCompany';
 import { logCompanyFleet } from '../loggers/logCompanyFleet';
 import { logCompanyFbos } from '../loggers/logCompanyFbos';
-import { logCompanyFboJobs } from '../loggers/logCompanyFboJobs';
+import { logCompanyFboJobDestinations, logCompanyFboJobs } from '../loggers/logCompanyFboJobs';
 import { logCompanyJobs } from '../loggers/logCompanyJobs';
 import { logCompanyIncome } from '../loggers/logCompanyIncome';
 import { AccountLookup, CashFlowPaymentEntry, logCompanyCashFlow, logCompanyCashFlowPayments } from '../loggers/logCompanyCashFlow';
@@ -307,6 +307,12 @@ const builder = (yargs: yargs.Argv<CommonConfig>) => {
       type: 'string',
       alias: 'destination',
     })
+    .option('list-destinations', {
+      describe: 'List available destination ICAOs for FBO jobs (fbos --fbojobs only)',
+      type: 'boolean',
+      alias: 'destinations',
+      default: false,
+    })
     .option('payment', {
       describe: 'Show cashflow payment entries, optionally filtered by text such as Cargo or PAX (cashflow only)',
       type: 'string',
@@ -334,6 +340,7 @@ const builder = (yargs: yargs.Argv<CommonConfig>) => {
     .example('$0 company fbos --fbojobs', 'List your FBOs with jobs grouped under each FBO')
     .example('$0 company fbos --fbojobs --airport-icao=KJFK', 'List FBO jobs for one airport')
     .example('$0 company fbos --fbojobs --airport-icao=KJFK --destination-icao=KORD', 'List FBO jobs for one airport with legs to a destination')
+    .example('$0 company fbos --fbojobs --airport-icao=KJFK --list-destinations', 'List available FBO job destination ICAOs for one airport')
     .example('$0 company jobs', 'List your pending jobs')
     .example('$0 company income', 'Display your company income statement summary')
     .example('$0 company income --days=30', 'Display your statement summary for the last 30 days')
@@ -462,6 +469,12 @@ export const companyCommand: CompanyCommand = {
                       : fboJobs,
                   };
                 }));
+                if (argv['list-destinations']) {
+                  log(chalk.greenBright.bold('Your FBO Job Destinations\n'));
+                  logCompanyFboJobDestinations(companyFboJobs);
+                  break;
+                }
+
                 log(chalk.greenBright.bold('Your FBO Jobs\n'));
                 logCompanyFboJobs(companyFboJobs);
               } else {

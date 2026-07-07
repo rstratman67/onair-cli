@@ -130,6 +130,10 @@ Optionally filter FBO jobs by destination airport ICAO.
 
 `onair-cli company fbos --fbojobs --airport-icao=KILM --destination-icao=KERI`
 
+List available destination ICAOs for FBO jobs at an airport.
+
+`onair-cli company fbos --fbojobs --airport-icao=KILM --list-destinations`
+
 ### Company Jobs
 
 List your company's pending jobs
