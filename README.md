@@ -118,6 +118,18 @@ List your company FBOs, including fuel, fuel selling status and tied down/hanger
 
 `onair-cli company fbos`
 
+Display FBO jobs grouped under your company FBOs.
+
+`onair-cli company fbos --fbojobs`
+
+Optionally filter FBOs by airport ICAO.
+
+`onair-cli company fbos --fbojobs --airport-icao=KILM`
+
+Optionally filter FBO jobs by destination airport ICAO.
+
+`onair-cli company fbos --fbojobs --airport-icao=KILM --destination-icao=KERI`
+
 ### Company Jobs
 
 List your company's pending jobs
