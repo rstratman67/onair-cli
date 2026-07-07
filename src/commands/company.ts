@@ -2,6 +2,9 @@ import yargs, { BuilderCallback, CommandModule } from 'yargs';
 import chalk from 'chalk';
 import OnAirApi, { OnAirApiConfig, Company, Aircraft, Flight, Fbo, Job, IncomeStatement, CashFlow, BalanceSheet, Account } from 'onair-api';
 
+import { getCompanyFbos } from '../api/getCompanyFbos';
+import { getCompanyJobs } from '../api/getCompanyJobs';
+import { getFboJobs } from '../api/getFboJobs';
 import { CompanyTradingGood, getCompanyTradingGoods } from '../api/getCompanyTradingGoods';
 import { CompanyNotification, getCompanyNotifications } from '../api/getCompanyNotifications';
 import { getCompanyWorkOrders } from '../api/getCompanyWorkOrders';
@@ -242,6 +245,7 @@ const builder = (yargs: yargs.Argv<CommonConfig>) => {
     .option('airport-icao', {
       'describe': 'Filter fleet by current airport ICAO, or FBOs by airport ICAO',
       'type': 'string',
+      'alias': 'airport-iaco',
     })
     .option('sort', {
       'describe': 'Sort fleet results',
@@ -420,7 +424,7 @@ export const companyCommand: CompanyCommand = {
           }
 
           case 'fbos': {
-            const companyFbos: Fbo[] = await api.getCompanyFbos();
+            const companyFbos: Fbo[] = await getCompanyFbos(argv['companyId'], argv['apiKey']);
             const airportIcaoFilter = typeof argv['airport-icao'] === 'string'
               ? argv['airport-icao'].trim().toLocaleUpperCase()
               : undefined;
@@ -432,9 +436,15 @@ export const companyCommand: CompanyCommand = {
             
             if (filteredFbos.length) {
               if (argv['fbojobs']) {
-                const companyJobs: Job[] = await api.getCompanyJobs();
+                const apiKey = argv['apiKey'];
+                const companyFboJobs = await Promise.all(filteredFbos.map(async (fbo) => {
+                  return {
+                    fbo,
+                    jobs: await getFboJobs(fbo.Id, apiKey),
+                  };
+                }));
                 log(chalk.greenBright.bold('Your FBO Jobs\n'));
-                logCompanyFboJobs(filteredFbos, companyJobs);
+                logCompanyFboJobs(companyFboJobs);
               } else {
                 log(chalk.greenBright.bold('Your FBOs\n'));
                 logCompanyFbos(filteredFbos);
@@ -448,7 +458,7 @@ export const companyCommand: CompanyCommand = {
           }
 
           case 'jobs': {
-            const companyJobs: Job[] = await api.getCompanyJobs();
+            const companyJobs: Job[] = await getCompanyJobs(argv['companyId'], argv['apiKey']);
 
             if (companyJobs.length) {
               log(chalk.greenBright.bold('Your Pending Jobs\n'));
