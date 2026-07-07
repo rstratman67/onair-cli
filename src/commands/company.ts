@@ -3,6 +3,7 @@ import chalk from 'chalk';
 import OnAirApi, { OnAirApiConfig, Company, Aircraft, Flight, Fbo, Job, IncomeStatement, CashFlow, BalanceSheet, Account } from 'onair-api';
 
 import { CompanyTradingGood, getCompanyTradingGoods } from '../api/getCompanyTradingGoods';
+import { CompanyNotification, getCompanyNotifications } from '../api/getCompanyNotifications';
 import { getCompanyWorkOrders } from '../api/getCompanyWorkOrders';
 import { logCompanyTradingGoods, logCompanyTradingGoodsSummary } from '../loggers/logCompanyTradingGoods';
 import { logCompanyWorkOrders, getWorkOrderAircraftIcao } from '../loggers/logCompanyWorkOrders';
@@ -16,6 +17,7 @@ import { logCompanyFboJobs } from '../loggers/logCompanyFboJobs';
 import { logCompanyJobs } from '../loggers/logCompanyJobs';
 import { logCompanyIncome } from '../loggers/logCompanyIncome';
 import { AccountLookup, CashFlowPaymentEntry, logCompanyCashFlow, logCompanyCashFlowPayments } from '../loggers/logCompanyCashFlow';
+import { logCompanyNotifications } from '../loggers/logCompanyNotifications';
 
 const log = console.log;
 
@@ -167,17 +169,67 @@ const getAccountLookup = (income: IncomeStatement, balanceSheet: BalanceSheet): 
   return lookup;
 };
 
+const parseDateOnly = (startDate: string): Date | undefined => {
+  const isoDate = startDate.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (isoDate) {
+    return new Date(Number(isoDate[1]), Number(isoDate[2]) - 1, Number(isoDate[3]));
+  }
+
+  const enGbDate = startDate.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+  if (enGbDate) {
+    return new Date(Number(enGbDate[3]), Number(enGbDate[2]) - 1, Number(enGbDate[1]));
+  }
+
+  return undefined;
+};
+
+const parseNotificationDate = (dateStr: string): Date | undefined => {
+  const parsedDate = new Date(Date.parse(dateStr));
+  return Number.isNaN(parsedDate.getTime()) ? undefined : parsedDate;
+};
+
+const parseNotificationFilterDate = (dateValue: string | undefined, optionName: string): Date | undefined => {
+  if (typeof dateValue === 'undefined') {
+    return undefined;
+  }
+
+  const parsedDate = parseDateOnly(dateValue) || parseNotificationDate(dateValue);
+
+  if (!parsedDate) {
+    throw new Error(`Invalid ${optionName} "${dateValue}". Use a date like 2026-05-31, 31/05/2026, or 2026-05-31T12:00:00Z.`);
+  }
+
+  return parsedDate;
+};
+
 const builder = (yargs: yargs.Argv<CommonConfig>) => {
   return yargs
     .positional('action', {
       describe: 'Optional info to lookup from your company',
       type: 'string',
-      choices: ['fleet', 'flights', 'fbos', 'jobs', 'income', 'cashflow', 'cash-flow', 'work-orders', 'trading-goods', 'trading_goods'],
+      choices: ['fleet', 'flights', 'fbos', 'jobs', 'income', 'cashflow', 'cash-flow', 'notifications', 'work-orders', 'trading-goods', 'trading_goods'],
     })
     .option('page', {
-      'describe': 'Page number (flights only)',
+      'describe': 'Page number (flights and notifications only)',
       'type': 'number',
       'alias': 'p',
+    })
+    .option('limit', {
+      describe: 'Number of notifications to display (notifications only)',
+      type: 'number',
+      default: 20,
+    })
+    .option('pages', {
+      describe: 'Number of notification pages to fetch (notifications only)',
+      type: 'number',
+    })
+    .option('start-date', {
+      describe: 'Fetch notifications from now back to this date (notifications only)',
+      type: 'string',
+    })
+    .option('end-date', {
+      describe: 'Filter notifications through this date (notifications only)',
+      type: 'string',
     })
     .option('days', {
       'describe': 'Days to display (Income statement only)',
@@ -250,6 +302,12 @@ const builder = (yargs: yargs.Argv<CommonConfig>) => {
       default: false,
     })
     .example('$0 company','Get summary information for your company')
+    .example('$0 company notifications', 'Display your company notifications')
+    .example('$0 company notifications --limit=50', 'Display up to 50 company notifications')
+    .example('$0 company notifications --page=2', 'Display page 2 of company notifications')
+    .example('$0 company notifications --limit=50 --pages=3', 'Display three pages of company notifications')
+    .example('$0 company notifications --start-date=2026-05-31', 'Display notifications from now back to May 31, 2026')
+    .example('$0 company notifications --start-date=2026-05-01 --end-date=2026-05-31', 'Display notifications in a date range')
     .example('$0 company fleet','List your aircraft')
     .example('$0 company fleet --aircraft-type=airbus', 'List only matching aircraft types')
     .example('$0 company fleet --airport-icao=KJFK', 'List only aircraft at an airport')
@@ -411,6 +469,70 @@ export const companyCommand: CompanyCommand = {
             const priorDateStr = new Date(priorDate).toISOString();
             const income: IncomeStatement = await api.getCompanyIncomeStatement(priorDateStr, currentDateStr);    
             logCompanyIncome(income, daysToDisplay);
+            break;
+          }
+
+          case 'notifications': {
+            const notificationLimit = typeof argv['limit'] === 'number' && argv['limit'] > 0 ? argv['limit'] : 20;
+            const notificationPage = typeof argv['page'] === 'undefined' || argv['page'] < 1 ? 1 : argv['page'];
+            const notificationStartDate = parseNotificationFilterDate(argv['start-date'], 'start date');
+            const notificationEndDate = parseNotificationFilterDate(argv['end-date'], 'end date');
+            if (notificationStartDate && notificationEndDate && notificationStartDate > notificationEndDate) {
+              throw new Error('Start date must be before or equal to end date.');
+            }
+            const notificationPages = typeof argv['pages'] === 'number' && argv['pages'] > 0
+              ? Math.floor(argv['pages'])
+              : notificationStartDate ? Number.MAX_SAFE_INTEGER : 1;
+            const notifications: CompanyNotification[] = [];
+
+            for (let pageOffset = 0; pageOffset < notificationPages; pageOffset++) {
+              const pageToFetch = notificationPage + pageOffset;
+              const startIndex = (pageToFetch - 1) * notificationLimit;
+              const pageNotifications = await getCompanyNotifications(
+                argv['companyId'],
+                argv['apiKey'],
+                startIndex,
+                notificationLimit
+              );
+
+              notifications.push(...pageNotifications);
+
+              const reachedStartDate = notificationStartDate
+                ? pageNotifications.some((notification) => {
+                  const eventDate = parseNotificationDate(notification.ZuluEventTime);
+                  return typeof eventDate !== 'undefined' && eventDate < notificationStartDate;
+                })
+                : false;
+
+              if (pageNotifications.length < notificationLimit || reachedStartDate) {
+                break;
+              }
+            }
+
+            const filteredNotifications = notificationStartDate || notificationEndDate
+              ? notifications.filter((notification) => {
+                const eventDate = parseNotificationDate(notification.ZuluEventTime);
+                return typeof eventDate !== 'undefined'
+                  && (!notificationStartDate || eventDate >= notificationStartDate)
+                  && (!notificationEndDate || eventDate <= notificationEndDate);
+              })
+              : notifications;
+
+            if (filteredNotifications.length) {
+              const pagesLabel = notificationPages === Number.MAX_SAFE_INTEGER
+                ? 'until start date'
+                : `${notificationPages} page${notificationPages > 1 ? 's' : ''} requested`;
+              const startDateLabel = notificationStartDate ? `, since ${notificationStartDate.toLocaleString('en-GB')}` : '';
+              const endDateLabel = notificationEndDate ? `, through ${notificationEndDate.toLocaleString('en-GB')}` : '';
+              log(chalk.greenBright.bold(`Your company notifications (Page ${notificationPage}, ${notificationLimit} per page, ${pagesLabel}${startDateLabel}${endDateLabel})\n`));
+              logCompanyNotifications(filteredNotifications);
+
+              if (!notificationStartDate && filteredNotifications.length === notificationLimit * notificationPages) {
+                log(`\nSuggested command: ${argv['$0']} company notifications --page=${notificationPage + notificationPages} --limit=${notificationLimit} --pages=${notificationPages}`);
+              }
+            } else {
+              log('No company notifications found.');
+            }
             break;
           }
 

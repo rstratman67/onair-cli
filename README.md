@@ -56,6 +56,38 @@ Get summary information on your company. **Note:** You must specify or have prev
 
 `onair-cli company`
 
+### Company Notifications
+
+Display your company's notifications.
+
+`onair-cli company notifications`
+
+This supports pagination showing 20 notifications per page by default.
+
+`onair-cli company notifications --page=2`
+
+Optionally choose how many notifications to display.
+
+`onair-cli company notifications --limit=50`
+
+Optionally fetch multiple pages when you need more than one request.
+
+`onair-cli company notifications --limit=50 --pages=3`
+
+Optionally fetch notifications from now back to a start date.
+
+`onair-cli company notifications --start-date=2026-05-31`
+
+`onair-cli company notifications --start-date=31/05/2026`
+
+Use `--pages` with `--start-date` to cap how many API pages are fetched.
+
+`onair-cli company notifications --start-date=2026-05-31 --limit=50 --pages=5`
+
+Optionally add an end date to fetch a date range.
+
+`onair-cli company notifications --start-date=2026-05-01 --end-date=2026-05-31`
+
 ### Company Fleet
 
 List details of your company's fleet of aircraft.
