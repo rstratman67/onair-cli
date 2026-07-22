@@ -56,6 +56,38 @@ Get summary information on your company. **Note:** You must specify or have prev
 
 `onair-cli company`
 
+### Company Notifications
+
+Display your company's notifications.
+
+`onair-cli company notifications`
+
+This supports pagination showing 20 notifications per page by default.
+
+`onair-cli company notifications --page=2`
+
+Optionally choose how many notifications to display.
+
+`onair-cli company notifications --limit=50`
+
+Optionally fetch multiple pages when you need more than one request.
+
+`onair-cli company notifications --limit=50 --pages=3`
+
+Optionally fetch notifications from now back to a start date.
+
+`onair-cli company notifications --start-date=2026-05-31`
+
+`onair-cli company notifications --start-date=31/05/2026`
+
+Use `--pages` with `--start-date` to cap how many API pages are fetched.
+
+`onair-cli company notifications --start-date=2026-05-31 --limit=50 --pages=5`
+
+Optionally add an end date to fetch a date range.
+
+`onair-cli company notifications --start-date=2026-05-01 --end-date=2026-05-31`
+
 ### Company Fleet
 
 List details of your company's fleet of aircraft.
@@ -86,11 +118,55 @@ List your company FBOs, including fuel, fuel selling status and tied down/hanger
 
 `onair-cli company fbos`
 
+Display FBO jobs grouped under your company FBOs.
+
+`onair-cli company fbos --fbojobs`
+
+Optionally filter FBOs by airport ICAO.
+
+`onair-cli company fbos --fbojobs --airport-icao=KILM`
+
+Optionally list only FBOs with less than 50% fuel available. Add `--100LL` or `--Jet` to check a specific fuel type.
+
+`onair-cli company fbos --need-fuel`
+
+`onair-cli company fbos --need-fuel --100LL`
+
+`onair-cli company fbos --need-fuel --Jet`
+
+Optionally filter FBO jobs by destination airport ICAO.
+
+`onair-cli company fbos --fbojobs --airport-icao=KILM --destination-icao=KERI`
+
+List available destination ICAOs for FBO jobs at an airport.
+
+`onair-cli company fbos --fbojobs --airport-icao=KILM --list-destinations`
+
 ### Company Jobs
 
 List your company's pending jobs
 
 `onair-cli company jobs`
+
+### Company Cashflow
+
+Display your company's cashflow, including current cash, last report amount and cashflow entries.
+
+`onair-cli company cashflow`
+
+`onair-cli company cash-flow`
+
+Optionally show only payment entries, filtered by payment text such as Cargo or PAX.
+
+`onair-cli company cashflow --payment=Cargo`
+
+`onair-cli company cashflow --payment=PAX`
+
+Optionally show readable account names where available.
+
+`onair-cli company cashflow --readable-account-ids`
+
+`onair-cli company cashflow --payment=Cargo --readable-account-ids`
 
 ### Company Work Orders
 
@@ -113,6 +189,32 @@ Optionally show assigned crew with readable names.
 Optionally show the work order ID.
 
 `onair-cli company work-orders --work-order-id`
+
+### Company Trading Goods
+
+List your company's trading goods.
+
+`onair-cli company trading-goods`
+
+`onair-cli company trading_goods`
+
+Optionally filter by merchandise type name.
+
+`onair-cli company trading_goods --merchandiseType=Water`
+
+Optionally filter by airport ICAO.
+
+`onair-cli company trading_goods --trading-airport-icao=KJFK`
+
+Optionally hide raw IDs or swap them to readable values.
+
+`onair-cli company trading_goods --hide-ids`
+
+`onair-cli company trading_goods --readable-ids`
+
+Optionally show a one-line summary per trading good.
+
+`onair-cli company trading_goods --summary`
 
 ### Flight
 
