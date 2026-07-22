@@ -54,7 +54,7 @@ export const getWorkOrderAircraftIcao = (workOrder: CompanyWorkOrder) => {
   ]);
 };
 
-const getWorkOrderAircraftIdentifier = (workOrder: CompanyWorkOrder) => {
+export const getWorkOrderAircraftIdentifier = (workOrder: CompanyWorkOrder) => {
   const aircraft = getAircraftRecord(workOrder);
 
   return pickFirstString([

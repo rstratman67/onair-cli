@@ -178,6 +178,10 @@ Optionally filter by aircraft ICAO.
 
 `onair-cli company work-orders --aircraft-icao=C172`
 
+Optionally filter by the aircraft's human-readable identifier. Matching is case-insensitive.
+
+`onair-cli company work-orders --aircraft-ident=N123AB`
+
 Optionally show assigned crew with readable names.
 
 `onair-cli company work-orders --show-crew`
