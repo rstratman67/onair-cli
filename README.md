@@ -126,6 +126,14 @@ Optionally filter FBOs by airport ICAO.
 
 `onair-cli company fbos --fbojobs --airport-icao=KILM`
 
+Optionally list only FBOs with less than 50% fuel available. Add `--100LL` or `--Jet` to check a specific fuel type.
+
+`onair-cli company fbos --need-fuel`
+
+`onair-cli company fbos --need-fuel --100LL`
+
+`onair-cli company fbos --need-fuel --Jet`
+
 Optionally filter FBO jobs by destination airport ICAO.
 
 `onair-cli company fbos --fbojobs --airport-icao=KILM --destination-icao=KERI`

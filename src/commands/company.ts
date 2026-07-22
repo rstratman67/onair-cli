@@ -211,6 +211,18 @@ const jobHasDestinationIcao = (job: Job, destinationIcao: string): boolean => {
   });
 };
 
+const isFuelBelowHalf = (quantity: number, capacity: number): boolean => {
+  return capacity > 0 && quantity < capacity / 2;
+};
+
+const fboNeedsFuel = (fbo: Fbo, needs100LL: boolean, needsJet: boolean): boolean => {
+  const check100LL = needs100LL || !needsJet;
+  const checkJet = needsJet || !needs100LL;
+
+  return (check100LL && isFuelBelowHalf(fbo.Fuel100LLQuantity, fbo.Fuel100LLCapacity))
+    || (checkJet && isFuelBelowHalf(fbo.FuelJetQuantity, fbo.FuelJetCapacity));
+};
+
 const builder = (yargs: yargs.Argv<CommonConfig>) => {
   return yargs
     .positional('action', {
@@ -302,6 +314,21 @@ const builder = (yargs: yargs.Argv<CommonConfig>) => {
       type: 'boolean',
       default: false,
     })
+    .option('need-fuel', {
+      describe: 'Show only FBOs with less than 50% fuel available (fbos only)',
+      type: 'boolean',
+      default: false,
+    })
+    .option('100LL', {
+      describe: 'Filter --need-fuel to 100LL fuel (fbos only)',
+      type: 'boolean',
+      default: false,
+    })
+    .option('Jet', {
+      describe: 'Filter --need-fuel to Jet fuel (fbos only)',
+      type: 'boolean',
+      default: false,
+    })
     .option('destination-icao', {
       describe: 'Filter FBO jobs by destination airport ICAO (fbos --fbojobs only)',
       type: 'string',
@@ -337,6 +364,8 @@ const builder = (yargs: yargs.Argv<CommonConfig>) => {
     .example('$0 company flights -p=2','List your flights, showing page 2')
     .example('$0 company fbos', 'List your FBOs')
     .example('$0 company fbos --airport-icao=KJFK', 'List FBOs for one airport')
+    .example('$0 company fbos --need-fuel --100LL', 'List FBOs with less than 50% 100LL available')
+    .example('$0 company fbos --need-fuel --Jet', 'List FBOs with less than 50% Jet fuel available')
     .example('$0 company fbos --fbojobs', 'List your FBOs with jobs grouped under each FBO')
     .example('$0 company fbos --fbojobs --airport-icao=KJFK', 'List FBO jobs for one airport')
     .example('$0 company fbos --fbojobs --airport-icao=KJFK --destination-icao=KORD', 'List FBO jobs for one airport with legs to a destination')
@@ -447,10 +476,19 @@ export const companyCommand: CompanyCommand = {
             const airportIcaoFilter = typeof argv['airport-icao'] === 'string'
               ? argv['airport-icao'].trim().toLocaleUpperCase()
               : undefined;
+            const needsFuelFilter = Boolean(argv['need-fuel']);
+            const needs100LLFilter = Boolean(argv['100LL']);
+            const needsJetFilter = Boolean(argv['Jet']);
             const filteredFbos = companyFbos.filter((fbo) => {
-              return airportIcaoFilter
+              const matchesAirportIcao = airportIcaoFilter
                 ? fbo.Airport?.ICAO?.toLocaleUpperCase() === airportIcaoFilter
                 : true;
+
+              const matchesFuelNeed = needsFuelFilter
+                ? fboNeedsFuel(fbo, needs100LLFilter, needsJetFilter)
+                : true;
+
+              return matchesAirportIcao && matchesFuelNeed;
             });
             
             if (filteredFbos.length) {
@@ -481,8 +519,8 @@ export const companyCommand: CompanyCommand = {
                 log(chalk.greenBright.bold('Your FBOs\n'));
                 logCompanyFbos(filteredFbos);
               }
-            } else if (companyFbos.length && airportIcaoFilter) {
-              log('No FBOs matched your airport ICAO filter.');
+            } else if (companyFbos.length && (airportIcaoFilter || needsFuelFilter)) {
+              log('No FBOs matched your FBO filters.');
             } else {
               log('No FBO... no 100LL! ' + chalk.magentaBright('✈'))
             }
