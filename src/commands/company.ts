@@ -3,7 +3,11 @@ import chalk from 'chalk';
 import OnAirApi, { OnAirApiConfig, Company, Aircraft, Flight, Fbo, Job, IncomeStatement } from 'onair-api';
 
 import { getCompanyWorkOrders } from '../api/getCompanyWorkOrders';
-import { logCompanyWorkOrders, getWorkOrderAircraftIcao } from '../loggers/logCompanyWorkOrders';
+import {
+  logCompanyWorkOrders,
+  getWorkOrderAircraftIcao,
+  getWorkOrderAircraftIdentifier,
+} from '../loggers/logCompanyWorkOrders';
 import { CompanyWorkOrder } from '../types/CompanyWorkOrder';
 import { CommonConfig } from '../utils/commonTypes';
 import { logFlights } from '../loggers/logFlights';
@@ -48,6 +52,10 @@ const builder = (yargs: yargs.Argv<CommonConfig>) => {
       'describe': 'Filter work orders by aircraft ICAO (work-orders only)',
       'type': 'string',
     })
+    .option('aircraft-ident', {
+      'describe': 'Filter work orders by aircraft identifier (work-orders only)',
+      'type': 'string',
+    })
     .option('show-crew', {
       'describe': 'Display assigned crew for work orders',
       'type': 'boolean',
@@ -71,6 +79,7 @@ const builder = (yargs: yargs.Argv<CommonConfig>) => {
     .example('$0 company income --days=30', 'Display your statement summary for the last 30 days')
     .example('$0 company work-orders', 'List your company work orders')
     .example('$0 company work-orders --aircraft-icao=C172', 'List work orders for one aircraft ICAO')
+    .example('$0 company work-orders --aircraft-ident=N123AB', 'List work orders for one aircraft identifier')
     .example('$0 company work-orders --show-crew', 'List work orders with assigned crew names')
     .example('$0 company work-orders --work-order-id', 'List work orders including the work order ID');
 }
@@ -199,13 +208,19 @@ export const companyCommand: CompanyCommand = {
             const aircraftIcaoFilter = typeof argv['aircraft-icao'] === 'string'
               ? argv['aircraft-icao'].trim().toLocaleUpperCase()
               : undefined;
+            const aircraftIdentFilter = typeof argv['aircraft-ident'] === 'string'
+              ? argv['aircraft-ident'].trim().toLocaleUpperCase()
+              : undefined;
 
             const filteredWorkOrders = workOrders.filter((workOrder) => {
-              if (!aircraftIcaoFilter) {
-                return true;
-              }
+              const matchesAircraftIcao = aircraftIcaoFilter
+                ? getWorkOrderAircraftIcao(workOrder)?.toLocaleUpperCase() === aircraftIcaoFilter
+                : true;
+              const matchesAircraftIdent = aircraftIdentFilter
+                ? getWorkOrderAircraftIdentifier(workOrder)?.toLocaleUpperCase() === aircraftIdentFilter
+                : true;
 
-              return getWorkOrderAircraftIcao(workOrder)?.toLocaleUpperCase() === aircraftIcaoFilter;
+              return matchesAircraftIcao && matchesAircraftIdent;
             });
 
             if (filteredWorkOrders.length) {
@@ -213,7 +228,7 @@ export const companyCommand: CompanyCommand = {
               logCompanyWorkOrders(filteredWorkOrders, argv['show-crew'], argv['work-order-id']);
             } else {
               log(workOrders.length
-                ? 'No work orders matched your aircraft ICAO filter.'
+                ? 'No work orders matched your aircraft filters.'
                 : 'No work orders found.');
             }
             break;
