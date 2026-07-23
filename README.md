@@ -190,6 +190,10 @@ Optionally show the work order ID.
 
 `onair-cli company work-orders --work-order-id`
 
+Display detailed information for one work order using the ID shown by `--work-order-id`.
+
+`onair-cli company work-orders --work-order-detail=WORK_ORDER_ID`
+
 ### Company Trading Goods
 
 List your company's trading goods.

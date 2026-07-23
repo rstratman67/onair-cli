@@ -11,6 +11,7 @@ import { getCompanyWorkOrders } from '../api/getCompanyWorkOrders';
 import { logCompanyTradingGoods, logCompanyTradingGoodsSummary } from '../loggers/logCompanyTradingGoods';
 import {
   logCompanyWorkOrders,
+  logCompanyWorkOrderDetails,
   getWorkOrderAircraftIcao,
   getWorkOrderAircraftIdentifier,
 } from '../loggers/logCompanyWorkOrders';
@@ -292,6 +293,10 @@ const builder = (yargs: yargs.Argv<CommonConfig>) => {
       'type': 'boolean',
       'default': false,
     })
+    .option('work-order-detail', {
+      'describe': 'Display detailed information for one work order ID',
+      'type': 'string',
+    })
     .option('merchandiseType', {
       describe: 'Filter trading goods by MerchandiseType.Name',
       type: 'string',
@@ -390,6 +395,7 @@ const builder = (yargs: yargs.Argv<CommonConfig>) => {
     .example('$0 company work-orders --aircraft-ident=N123AB', 'List work orders for one aircraft identifier')
     .example('$0 company work-orders --show-crew', 'List work orders with assigned crew names')
     .example('$0 company work-orders --work-order-id', 'List work orders including the work order ID')
+    .example('$0 company work-orders --work-order-detail=WORK_ORDER_ID', 'Display details for one work order ID')
     .example('$0 company trading-goods', 'List your trading goods')
     .example('$0 company trading_goods --merchandiseType=Water', 'Filter trading goods by merchandise type name')
     .example('$0 company trading_goods --trading-airport-icao=KJFK', 'Filter trading goods by airport ICAO')
@@ -670,6 +676,23 @@ export const companyCommand: CompanyCommand = {
 
           case 'work-orders': {
             const workOrders: CompanyWorkOrder[] = await getCompanyWorkOrders(argv['companyId'], argv['apiKey']);
+            const workOrderDetailId = typeof argv['work-order-detail'] === 'string'
+              ? argv['work-order-detail'].trim()
+              : undefined;
+
+            if (workOrderDetailId) {
+              const detailedWorkOrder = workOrders.find((workOrder) => {
+                return workOrder.Id?.toLocaleLowerCase() === workOrderDetailId.toLocaleLowerCase();
+              });
+
+              if (detailedWorkOrder) {
+                logCompanyWorkOrderDetails(detailedWorkOrder);
+              } else {
+                log(`No work order found with ID "${workOrderDetailId}".`);
+              }
+              break;
+            }
+
             const aircraftIcaoFilter = typeof argv['aircraft-icao'] === 'string'
               ? argv['aircraft-icao'].trim().toLocaleUpperCase()
               : undefined;
