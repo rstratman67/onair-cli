@@ -191,6 +191,12 @@ const formatDateValue = (value: unknown): string | undefined => {
   return Number.isNaN(date.getTime()) ? dateString : date.toLocaleString('en-GB');
 };
 
+export const getWorkOrderExpectedStart = (workOrder: CompanyWorkOrder): string | undefined => {
+  return getWorkOrderStatus(workOrder) === 'Pending'
+    ? formatDateValue(workOrder.StartDate)
+    : undefined;
+};
+
 const formatNumberValue = (value: unknown, suffix = ''): string | undefined => {
   const number = toNumberValue(value);
   return typeof number === 'undefined' ? undefined : `${number.toLocaleString('en-GB')}${suffix}`;
@@ -313,13 +319,19 @@ export const logCompanyWorkOrders = (
   showWorkOrderId = false
 ) => {
   const workOrderTable = cliTable();
+  const showExpectedStart = workOrders.some((workOrder) => getWorkOrderStatus(workOrder) === 'Pending');
 
   const headerRow = [
     chalk.green('Aircraft'),
     chalk.green('Ident'),
     chalk.green('Status'),
-    chalk.green('Summary'),
   ];
+
+  if (showExpectedStart) {
+    headerRow.push(chalk.green('Expected Start'));
+  }
+
+  headerRow.push(chalk.green('Summary'));
 
   if (showCrewAssigned) {
     headerRow.push(chalk.green('Crew Assigned'));
@@ -332,12 +344,18 @@ export const logCompanyWorkOrders = (
   workOrderTable.push(headerRow);
 
   workOrders.forEach((workOrder) => {
+    const status = getWorkOrderStatus(workOrder);
     const row = [
       getWorkOrderAircraftDisplayName(workOrder) || '-',
       getWorkOrderAircraftIdentifier(workOrder) || '-',
-      getWorkOrderStatus(workOrder) || '-',
-      getWorkOrderSummary(workOrder) || '-',
+      status || '-',
     ];
+
+    if (showExpectedStart) {
+      row.push(getWorkOrderExpectedStart(workOrder) || '-');
+    }
+
+    row.push(getWorkOrderSummary(workOrder) || '-');
 
     if (showCrewAssigned) {
       row.push(getWorkOrderAssignedCrew(workOrder) || '-');
