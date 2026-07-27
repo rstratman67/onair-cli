@@ -74,19 +74,21 @@ const hasActiveAction = (workOrder: CompanyWorkOrder) => {
     const action = toRecord(actionValue);
     const actionStatus = toNumberValue(action?.Status);
 
-    return Boolean(
+    if (typeof actionStatus !== 'undefined') {
+      return actionStatus === 1;
+    }
+
+    const hasFinished = Boolean(action?.EndedTime || action?.FailedTime);
+    return !hasFinished && Boolean(
       action?.StartedTime
       || action?.FlightId
       || action?.CurrentFlightId
-      || actionStatus === 1
     );
   });
 };
 
-const getWorkOrderStatus = (workOrder: CompanyWorkOrder) => {
+export const getWorkOrderStatus = (workOrder: CompanyWorkOrder) => {
   const numericStatus = toNumberValue(workOrder.Status);
-  const aircraft = getAircraftRecord(workOrder);
-  const aircraftStatus = toNumberValue(aircraft?.AircraftStatus);
 
   if (typeof numericStatus !== 'undefined') {
     if (
@@ -94,7 +96,6 @@ const getWorkOrderStatus = (workOrder: CompanyWorkOrder) => {
       && (
         hasActiveAction(workOrder)
         || workOrder.IsTicking === true
-        || aircraftStatus === 3
       )
     ) {
       return 'In Progress';
