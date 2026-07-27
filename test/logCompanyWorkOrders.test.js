@@ -4,6 +4,7 @@ const {
   getWorkOrderExpectedStart,
   getWorkOrderStatus,
   logCompanyWorkOrders,
+  matchesWorkOrderStatus,
 } = require('../bin/loggers/logCompanyWorkOrders');
 
 const aircraft = {
@@ -59,6 +60,11 @@ cases.forEach(({ name, workOrder, expected }) => {
   assert.strictEqual(getWorkOrderStatus(workOrder), expected, name);
 });
 
+assert.strictEqual(matchesWorkOrderStatus(cases[0].workOrder, 'pending'), true);
+assert.strictEqual(matchesWorkOrderStatus(cases[0].workOrder, 'in-progress'), false);
+assert.strictEqual(matchesWorkOrderStatus(cases[1].workOrder, 'in-progress'), true);
+assert.strictEqual(matchesWorkOrderStatus(cases[1].workOrder, 'In Progress'), true);
+
 const pendingWithStart = {
   Status: 1,
   StartDate: '2026-07-28T13:30:00',
@@ -88,4 +94,4 @@ try {
 assert.match(tableOutput, /Expected Start/);
 assert.match(tableOutput, /28\/07\/2026.*13:30:00/);
 
-console.log(`Passed ${cases.length} status cases and expected-start display cases.`);
+console.log(`Passed ${cases.length} status cases, status-filter cases, and expected-start display cases.`);

@@ -119,6 +119,27 @@ export const getWorkOrderStatus = (workOrder: CompanyWorkOrder) => {
   ]) || 'UNKNOWN';
 };
 
+export const WORK_ORDER_STATUS_FILTERS = [
+  'inactive',
+  'pending',
+  'in-progress',
+  'finished',
+  'failed',
+  'waiting',
+] as const;
+
+const normalizeWorkOrderStatus = (status: string): string => {
+  return status.trim().toLocaleLowerCase().replace(/\s+/g, '-');
+};
+
+export const matchesWorkOrderStatus = (
+  workOrder: CompanyWorkOrder,
+  statusFilter?: string
+): boolean => {
+  return !statusFilter
+    || normalizeWorkOrderStatus(getWorkOrderStatus(workOrder)) === normalizeWorkOrderStatus(statusFilter);
+};
+
 const getWorkOrderSummary = (workOrder: CompanyWorkOrder) => {
   return pickFirstString([
     workOrder.Description,

@@ -182,6 +182,14 @@ Optionally filter by the aircraft's human-readable identifier. Matching is case-
 
 `onair-cli company work-orders --aircraft-ident=N123AB`
 
+Optionally filter by status. Available values are `inactive`, `pending`, `in-progress`, `finished`, `failed`, and `waiting`.
+
+`onair-cli company work-orders --work-order-status=pending`
+
+Status filtering can be combined with the aircraft filters.
+
+`onair-cli company work-orders --aircraft-ident=N123AB --work-order-status=in-progress`
+
 Optionally show assigned crew with readable names.
 
 `onair-cli company work-orders --show-crew`
