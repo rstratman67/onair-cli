@@ -21,33 +21,46 @@
   "scripts": {
     "watch": "tsc -w",
     "prebuild": "rimraf bin",
-    "build": "tsc",
+    "build:client": "vite build",
+    "build:server": "tsc",
+    "build": "npm run build:client && npm run build:server",
+    "start": "node bin/server.js",
+    "dev": "vite",
     "prepublishOnly": "npm run build",
     "version": "git add -A",
     "postversion": "git push && git push --tags",
-    "lint": "eslint src --ext .ts"
+    "lint": "eslint src --ext .ts,.tsx"
   },
   "dependencies": {
     "axios": "^0.22.0",
     "chalk": "^4.1.2",
     "cli-table3": "^0.6.0",
     "dayjs": "^1.10.7",
+    "express": "^4.18.3",
     "find-up": "^5.0.0",
     "onair-api": "^1.0.13",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
     "terminal-link": "2.1.1",
     "yargs": "^17.2.1"
   },
   "devDependencies": {
-    "@types/node": "^16.10.2",
+    "@types/express": "^4.17.17",
+    "@types/node": "^20.11.0",
+    "@types/react": "^18.3.3",
+    "@types/react-dom": "^18.3.0",
     "@types/yargs": "^17.0.3",
+    "@vitejs/plugin-react": "^4.7.0",
     "@typescript-eslint/eslint-plugin": "^5.0.0",
+    "dotenv": "^16.1.4",
     "@typescript-eslint/parser": "^5.0.0",
     "eslint": "^8.7.0",
     "eslint-config-prettier": "^8.3.0",
     "eslint-import-resolver-typescript": "^2.5.0",
     "eslint-plugin-import": "^2.25.2",
     "rimraf": "^3.0.2",
-    "typescript": "^4.4.3"
+    "typescript": "^5.5.3",
+    "vite": "^5.4.1"
   },
   "bugs": {
     "url": "https://github.com/logicbox/onair-cli/issues"

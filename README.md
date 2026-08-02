@@ -160,9 +160,52 @@ These credentials are stored in the system home directory `~./.onair-credentials
 
 Remove your locally stored OnAir credentials.
 
-## Notes
+## Docker deployment
 
-This application is not affiliated with or endored by OnAir Company. OnAir Airline Manager &copy; OnAir Company.
+This repository now includes a Dockerized web dashboard that uses the existing OnAir CLI API layer.
+
+1. Copy `.env.example` to `.env` and set your credentials:
+
+```bash
+cp .env.example .env
+```
+
+2. Set your values in `.env`:
+
+```text
+ONAIR_API_KEY=your_api_key_here
+ONAIR_WORLD=stratus
+COMPANY_ID=your_company_id_here
+ONAIR_VA_ID=your_va_id_here
+```
+
+3. Build and run with Docker Compose:
+
+```bash
+docker compose up --build
+```
+
+4. Open the dashboard in your browser:
+
+```text
+http://localhost:8081
+```
+
+### Available pages
+
+- `/company` — company summary
+- `/company/fbos` — FBO list
+- `/company/jobs` — pending jobs
+- `/company/work-orders` — work orders
+- `/company/flights` — flights
+- `/company/trading-goods` — trading goods (if supported by `onair-api`)
+
+### Notes
+
+- The server reads credentials from environment variables: `ONAIR_API_KEY`, `ONAIR_WORLD`, and `COMPANY_ID`.
+- `ONAIR_VA_ID` is optional and only needed if using VA-specific data.
+
+This application is not affiliated with or endorsed by OnAir Company. OnAir Airline Manager &copy; OnAir Company.
 
 ## License
 [MIT](https://choosealicense.com/licenses/mit/)
