@@ -3,6 +3,10 @@ import { Fbo } from "onair-api";
 
 import { cliTable } from "../utils/cli-table";
 
+const formatWholeNumber = (value: number): string => {
+  return Math.trunc(value).toString();
+};
+
 export const logCompanyFbos = (companyFbos: Fbo[]): void => {
   const fboTable = cliTable();
 
@@ -23,9 +27,9 @@ export const logCompanyFbos = (companyFbos: Fbo[]): void => {
     fboTable.push([
       Fbo.Airport.ICAO,
       Fbo.Name,
-      Fbo.Fuel100LLQuantity + '/' + Fbo.Fuel100LLCapacity,
+      formatWholeNumber(Fbo.Fuel100LLQuantity) + '/' + formatWholeNumber(Fbo.Fuel100LLCapacity),
       Fbo.AllowFuel100LLSelling ? `✅ ${Fbo.Fuel100LLSellPrice}` : '❌',
-      Fbo.FuelJetQuantity + '/' + Fbo.FuelJetCapacity,
+      formatWholeNumber(Fbo.FuelJetQuantity) + '/' + formatWholeNumber(Fbo.FuelJetCapacity),
       Fbo.AllowFuelJetSelling ? `✅ ${Fbo.FuelJetSellPrice}` : '❌',
       Fbo.CargoWeightCapacity,
       Fbo.SleepingCapacity,

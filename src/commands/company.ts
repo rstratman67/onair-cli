@@ -1,19 +1,34 @@
 import yargs, { BuilderCallback, CommandModule } from 'yargs';
 import chalk from 'chalk';
-import OnAirApi, { OnAirApiConfig, Company, Aircraft, Flight, Fbo, Job, IncomeStatement } from 'onair-api';
+import OnAirApi, { OnAirApiConfig, Company, Aircraft, Flight, Fbo, Job, IncomeStatement, CashFlow, BalanceSheet, Account } from 'onair-api';
 
+import { getCompanyFbos } from '../api/getCompanyFbos';
+import { getCompanyJobs } from '../api/getCompanyJobs';
+import { getFboJobs } from '../api/getFboJobs';
 import { CompanyTradingGood, getCompanyTradingGoods } from '../api/getCompanyTradingGoods';
+import { CompanyNotification, getCompanyNotifications } from '../api/getCompanyNotifications';
 import { getCompanyWorkOrders } from '../api/getCompanyWorkOrders';
-import { logCompanyTradingGoods } from '../loggers/logCompanyTradingGoods';
-import { logCompanyWorkOrders, getWorkOrderAircraftIcao } from '../loggers/logCompanyWorkOrders';
+import { logCompanyTradingGoods, logCompanyTradingGoodsSummary } from '../loggers/logCompanyTradingGoods';
+import {
+  logCompanyWorkOrders,
+  logCompanyWorkOrderDetails,
+  getWorkOrderAircraftIcao,
+  getWorkOrderAircraftIdentifier,
+  matchesWorkOrderStatus,
+  WORK_ORDER_STATUS_FILTERS,
+} from '../loggers/logCompanyWorkOrders';
 import { CompanyWorkOrder } from '../types/CompanyWorkOrder';
 import { CommonConfig } from '../utils/commonTypes';
+import { matchesFboJobFilters } from '../utils/fboJobFilters';
 import { logFlights } from '../loggers/logFlights';
 import { logCompany } from '../loggers/logCompany';
 import { logCompanyFleet } from '../loggers/logCompanyFleet';
 import { logCompanyFbos } from '../loggers/logCompanyFbos';
+import { logCompanyFboJobDestinations, logCompanyFboJobs } from '../loggers/logCompanyFboJobs';
 import { logCompanyJobs } from '../loggers/logCompanyJobs';
 import { logCompanyIncome } from '../loggers/logCompanyIncome';
+import { AccountLookup, CashFlowPaymentEntry, logCompanyCashFlow, logCompanyCashFlowPayments } from '../loggers/logCompanyCashFlow';
+import { logCompanyNotifications } from '../loggers/logCompanyNotifications';
 
 const log = console.log;
 
@@ -86,17 +101,158 @@ const sortTradingGoodsByAirportIcao = <T extends Record<string, unknown>>(tradin
   });
 };
 
+const isPaymentEntry = (entry: CashFlowPaymentEntry, paymentFilter?: string): boolean => {
+  if (!entry.Description.toLocaleLowerCase().startsWith('payment for ')) {
+    return false;
+  }
+
+  return paymentFilter
+    ? entry.Description.toLocaleLowerCase().includes(paymentFilter.toLocaleLowerCase())
+    : true;
+};
+
+const addAircraftToLookup = (lookup: Record<string, string>, aircraft: Aircraft[]): Record<string, string> => {
+  return aircraft.reduce((lookup, fleetAircraft) => {
+    lookup[fleetAircraft.Id] = fleetAircraft.Identifier;
+    return lookup;
+  }, lookup);
+};
+
+const getAircraftIds = (entries: CashFlowPaymentEntry[]): string[] => {
+  return Array.from(new Set(entries
+    .map((entry) => entry.AircraftId)
+    .filter((aircraftId): aircraftId is string => typeof aircraftId === 'string' && Boolean(aircraftId))));
+};
+
+const getAircraftLookup = async (api: OnAirApi, entries: CashFlowPaymentEntry[]): Promise<Record<string, string>> => {
+  const lookup = addAircraftToLookup({}, await api.getCompanyFleet());
+  const missingAircraftIds = getAircraftIds(entries).filter((aircraftId) => !lookup[aircraftId]);
+  const batchSize = 10;
+
+  for (let index = 0; index < missingAircraftIds.length; index += batchSize) {
+    const aircraftBatch = missingAircraftIds.slice(index, index + batchSize);
+    const resolvedAircraft = await Promise.all(aircraftBatch.map(async (aircraftId) => {
+      try {
+        const aircraft = await api.getAircraft(aircraftId);
+        return { aircraftId, identifier: aircraft.Identifier };
+      } catch (e) {
+        return { aircraftId, identifier: aircraftId };
+      }
+    }));
+
+    resolvedAircraft.forEach((aircraft) => {
+      lookup[aircraft.aircraftId] = aircraft.identifier;
+    });
+  }
+
+  return lookup;
+};
+
+const getAccountLabel = (account: Account): string => {
+  return account.ShortName ? `${account.Name} (${account.ShortName})` : account.Name;
+};
+
+const addAccountsToLookup = (lookup: AccountLookup, accounts: Account[]): AccountLookup => {
+  accounts.forEach((account) => {
+    account.Entries.forEach((entry) => {
+      lookup[entry.AccountId] = getAccountLabel(account);
+
+      const entryAccount = Array.isArray(entry.Account) ? entry.Account[0] : entry.Account;
+      if (entryAccount?.Id) {
+        lookup[entryAccount.Id] = entryAccount.ShortName
+          ? `${entryAccount.Name} (${entryAccount.ShortName})`
+          : entryAccount.Name;
+      }
+    });
+  });
+
+  return lookup;
+};
+
+const getAccountLookup = (income: IncomeStatement, balanceSheet: BalanceSheet): AccountLookup => {
+  const lookup: AccountLookup = {};
+
+  addAccountsToLookup(lookup, income.REVAccounts);
+  addAccountsToLookup(lookup, income.EXPAccounts);
+  addAccountsToLookup(lookup, balanceSheet.ASSAccounts);
+  addAccountsToLookup(lookup, balanceSheet.LIAAccounts);
+
+  return lookup;
+};
+
+const parseDateOnly = (startDate: string): Date | undefined => {
+  const isoDate = startDate.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (isoDate) {
+    return new Date(Number(isoDate[1]), Number(isoDate[2]) - 1, Number(isoDate[3]));
+  }
+
+  const enGbDate = startDate.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+  if (enGbDate) {
+    return new Date(Number(enGbDate[3]), Number(enGbDate[2]) - 1, Number(enGbDate[1]));
+  }
+
+  return undefined;
+};
+
+const parseNotificationDate = (dateStr: string): Date | undefined => {
+  const parsedDate = new Date(Date.parse(dateStr));
+  return Number.isNaN(parsedDate.getTime()) ? undefined : parsedDate;
+};
+
+const parseNotificationFilterDate = (dateValue: string | undefined, optionName: string): Date | undefined => {
+  if (typeof dateValue === 'undefined') {
+    return undefined;
+  }
+
+  const parsedDate = parseDateOnly(dateValue) || parseNotificationDate(dateValue);
+
+  if (!parsedDate) {
+    throw new Error(`Invalid ${optionName} "${dateValue}". Use a date like 2026-05-31, 31/05/2026, or 2026-05-31T12:00:00Z.`);
+  }
+
+  return parsedDate;
+};
+
+const isFuelBelowHalf = (quantity: number, capacity: number): boolean => {
+  return capacity > 0 && quantity < capacity / 2;
+};
+
+const fboNeedsFuel = (fbo: Fbo, needs100LL: boolean, needsJet: boolean): boolean => {
+  const check100LL = needs100LL || !needsJet;
+  const checkJet = needsJet || !needs100LL;
+
+  return (check100LL && isFuelBelowHalf(fbo.Fuel100LLQuantity, fbo.Fuel100LLCapacity))
+    || (checkJet && isFuelBelowHalf(fbo.FuelJetQuantity, fbo.FuelJetCapacity));
+};
+
 const builder = (yargs: yargs.Argv<CommonConfig>) => {
   return yargs
     .positional('action', {
       describe: 'Optional info to lookup from your company',
       type: 'string',
-      choices: ['fleet', 'flights', 'fbos', 'jobs', 'income', 'work-orders', 'trading-goods', 'trading_goods'],
+      choices: ['fleet', 'flights', 'fbos', 'jobs', 'income', 'cashflow', 'cash-flow', 'notifications', 'work-orders', 'trading-goods', 'trading_goods'],
     })
     .option('page', {
-      'describe': 'Page number (flights only)',
+      'describe': 'Page number (flights and notifications only)',
       'type': 'number',
       'alias': 'p',
+    })
+    .option('limit', {
+      describe: 'Number of notifications to display (notifications only)',
+      type: 'number',
+      default: 20,
+    })
+    .option('pages', {
+      describe: 'Number of notification pages to fetch (notifications only)',
+      type: 'number',
+    })
+    .option('start-date', {
+      describe: 'Fetch notifications from now back to this date (notifications only)',
+      type: 'string',
+    })
+    .option('end-date', {
+      describe: 'Filter notifications through this date (notifications only)',
+      type: 'string',
     })
     .option('days', {
       'describe': 'Days to display (Income statement only)',
@@ -107,8 +263,9 @@ const builder = (yargs: yargs.Argv<CommonConfig>) => {
       'type': 'string',
     })
     .option('airport-icao', {
-      'describe': 'Filter fleet by current airport ICAO (fleet only)',
+      'describe': 'Filter fleet by current airport ICAO, or FBOs by airport ICAO',
       'type': 'string',
+      'alias': 'airport-iaco',
     })
     .option('sort', {
       'describe': 'Sort fleet results',
@@ -118,6 +275,15 @@ const builder = (yargs: yargs.Argv<CommonConfig>) => {
     .option('aircraft-icao', {
       'describe': 'Filter work orders by aircraft ICAO (work-orders only)',
       'type': 'string',
+    })
+    .option('aircraft-ident', {
+      'describe': 'Filter work orders by aircraft identifier (work-orders only)',
+      'type': 'string',
+    })
+    .option('work-order-status', {
+      'describe': 'Filter work orders by status',
+      'type': 'string',
+      'choices': [...WORK_ORDER_STATUS_FILTERS],
     })
     .option('show-crew', {
       'describe': 'Display assigned crew for work orders',
@@ -129,6 +295,10 @@ const builder = (yargs: yargs.Argv<CommonConfig>) => {
       'type': 'boolean',
       'default': false,
     })
+    .option('work-order-detail', {
+      'describe': 'Display detailed information for one work order ID',
+      'type': 'string',
+    })
     .option('merchandiseType', {
       describe: 'Filter trading goods by MerchandiseType.Name',
       type: 'string',
@@ -137,6 +307,7 @@ const builder = (yargs: yargs.Argv<CommonConfig>) => {
     .option('trading-airport-icao', {
       describe: 'Filter trading goods by CurrentAirport.ICAO',
       type: 'string',
+      alias: 'trading-airport',
     })
     .option('hide-ids', {
       describe: 'Hide raw ID columns for trading goods',
@@ -148,7 +319,74 @@ const builder = (yargs: yargs.Argv<CommonConfig>) => {
       type: 'boolean',
       default: false,
     })
+    .option('summary', {
+      describe: 'Show a single-line summary for each trading good',
+      type: 'boolean',
+      default: false,
+    })
+    .option('fbojobs', {
+      describe: 'Show FBO jobs grouped by airport and FBO name (fbos only)',
+      type: 'boolean',
+      default: false,
+    })
+    .option('need-fuel', {
+      describe: 'Show only FBOs with less than 50% fuel available (fbos only)',
+      type: 'boolean',
+      default: false,
+    })
+    .option('100LL', {
+      describe: 'Filter --need-fuel to 100LL fuel (fbos only)',
+      type: 'boolean',
+      default: false,
+    })
+    .option('Jet', {
+      describe: 'Filter --need-fuel to Jet fuel (fbos only)',
+      type: 'boolean',
+      default: false,
+    })
+    .option('destination-icao', {
+      describe: 'Filter FBO jobs by destination airport ICAO (fbos --fbojobs only)',
+      type: 'string',
+      alias: 'destination',
+    })
+    .option('departure-icao', {
+      describe: 'Filter FBO jobs by leg departure airport ICAO (fbos --fbojobs only)',
+      type: 'string',
+      alias: 'departure',
+    })
+    .option('arrival-icao', {
+      describe: 'Filter FBO jobs by leg arrival airport ICAO (fbos --fbojobs only)',
+      type: 'string',
+      alias: 'arrival',
+    })
+    .option('pending-only', {
+      describe: 'Show only pending, untaken FBO jobs (fbos --fbojobs only)',
+      type: 'boolean',
+      alias: 'pending',
+      default: false,
+    })
+    .option('list-destinations', {
+      describe: 'List available destination ICAOs for FBO jobs (fbos --fbojobs only)',
+      type: 'boolean',
+      alias: 'destinations',
+      default: false,
+    })
+    .option('payment', {
+      describe: 'Show cashflow payment entries, optionally filtered by text such as Cargo or PAX (cashflow only)',
+      type: 'string',
+    })
+    .option('readable-account-ids', {
+      describe: 'Show cashflow account names where available instead of raw account IDs (cashflow only)',
+      type: 'boolean',
+      default: false,
+    })
     .example('$0 company','Get summary information for your company')
+    .example('$0 company notifications', 'Display your company notifications')
+    .example('$0 company notifications --limit=50', 'Display up to 50 company notifications')
+    .example('$0 company notifications --page=2', 'Display page 2 of company notifications')
+    .example('$0 company notifications --limit=50 --pages=3', 'Display three pages of company notifications')
+    .example('$0 company notifications --start-date=2026-05-31', 'Display notifications from now back to May 31, 2026')
+    .example('$0 company notifications --start-date=2026-05-01 --end-date=2026-05-31', 'Display notifications in a date range')
     .example('$0 company fleet','List your aircraft')
     .example('$0 company fleet --aircraft-type=airbus', 'List only matching aircraft types')
     .example('$0 company fleet --airport-icao=KJFK', 'List only aircraft at an airport')
@@ -156,18 +394,35 @@ const builder = (yargs: yargs.Argv<CommonConfig>) => {
     .example('$0 company flights','List your flights')
     .example('$0 company flights -p=2','List your flights, showing page 2')
     .example('$0 company fbos', 'List your FBOs')
+    .example('$0 company fbos --airport-icao=KJFK', 'List FBOs for one airport')
+    .example('$0 company fbos --need-fuel --100LL', 'List FBOs with less than 50% 100LL available')
+    .example('$0 company fbos --need-fuel --Jet', 'List FBOs with less than 50% Jet fuel available')
+    .example('$0 company fbos --fbojobs', 'List your FBOs with jobs grouped under each FBO')
+    .example('$0 company fbos --fbojobs --airport-icao=KJFK', 'List FBO jobs for one airport')
+    .example('$0 company fbos --fbojobs --airport-icao=KJFK --destination-icao=KORD', 'List FBO jobs for one airport with legs to a destination')
+    .example('$0 company fbos --fbojobs --pending-only --departure-icao=KJFK --arrival-icao=KORD', 'List pending FBO jobs for a route')
+    .example('$0 company fbos --fbojobs --airport-icao=KJFK --list-destinations', 'List available FBO job destination ICAOs for one airport')
     .example('$0 company jobs', 'List your pending jobs')
     .example('$0 company income', 'Display your company income statement summary')
     .example('$0 company income --days=30', 'Display your statement summary for the last 30 days')
+    .example('$0 company cashflow', 'Display your company cashflow')
+    .example('$0 company cashflow --payment=Cargo', 'Display cashflow payment entries matching Cargo')
+    .example('$0 company cashflow --payment=PAX', 'Display cashflow payment entries matching PAX')
+    .example('$0 company cashflow --readable-account-ids', 'Display cashflow with readable account names where available')
     .example('$0 company work-orders', 'List your company work orders')
     .example('$0 company work-orders --aircraft-icao=C172', 'List work orders for one aircraft ICAO')
+    .example('$0 company work-orders --aircraft-ident=N123AB', 'List work orders for one aircraft identifier')
+    .example('$0 company work-orders --work-order-status=pending', 'List pending work orders')
+    .example('$0 company work-orders --work-order-status=in-progress', 'List work orders currently in progress')
     .example('$0 company work-orders --show-crew', 'List work orders with assigned crew names')
     .example('$0 company work-orders --work-order-id', 'List work orders including the work order ID')
+    .example('$0 company work-orders --work-order-detail=WORK_ORDER_ID', 'Display details for one work order ID')
     .example('$0 company trading-goods', 'List your trading goods')
     .example('$0 company trading_goods --merchandiseType=Water', 'Filter trading goods by merchandise type name')
     .example('$0 company trading_goods --trading-airport-icao=KJFK', 'Filter trading goods by airport ICAO')
     .example('$0 company trading_goods --hide-ids', 'Hide raw ID columns for trading goods')
-    .example('$0 company trading_goods --readable-ids', 'Show human readable values instead of raw trading goods IDs');
+    .example('$0 company trading_goods --readable-ids', 'Show human readable values instead of raw trading goods IDs')
+    .example('$0 company trading_goods --summary', 'Show a single-line summary for each trading good');
 }
 
 type CompanyCommand = (typeof builder) extends BuilderCallback<CommonConfig, infer R> ? CommandModule<CommonConfig, R> : never;
@@ -253,11 +508,64 @@ export const companyCommand: CompanyCommand = {
           }
 
           case 'fbos': {
-            const companyFbos: Fbo[] = await api.getCompanyFbos();
+            const companyFbos: Fbo[] = await getCompanyFbos(argv['companyId'], argv['apiKey']);
+            const airportIcaoFilter = typeof argv['airport-icao'] === 'string'
+              ? argv['airport-icao'].trim().toLocaleUpperCase()
+              : undefined;
+            const needsFuelFilter = Boolean(argv['need-fuel']);
+            const needs100LLFilter = Boolean(argv['100LL']);
+            const needsJetFilter = Boolean(argv['Jet']);
+            const filteredFbos = companyFbos.filter((fbo) => {
+              const matchesAirportIcao = airportIcaoFilter
+                ? fbo.Airport?.ICAO?.toLocaleUpperCase() === airportIcaoFilter
+                : true;
+
+              const matchesFuelNeed = needsFuelFilter
+                ? fboNeedsFuel(fbo, needs100LLFilter, needsJetFilter)
+                : true;
+
+              return matchesAirportIcao && matchesFuelNeed;
+            });
             
-            if (companyFbos.length) {
-              log(chalk.greenBright.bold('Your FBOs\n'));
-              logCompanyFbos(companyFbos);
+            if (filteredFbos.length) {
+              if (argv['fbojobs']) {
+                const apiKey = argv['apiKey'];
+                const destinationIcaoFilter = typeof argv['destination-icao'] === 'string'
+                  ? argv['destination-icao'].trim().toLocaleUpperCase()
+                  : undefined;
+                const departureIcaoFilter = typeof argv['departure-icao'] === 'string'
+                  ? argv['departure-icao'].trim().toLocaleUpperCase()
+                  : undefined;
+                const arrivalIcaoFilter = typeof argv['arrival-icao'] === 'string'
+                  ? argv['arrival-icao'].trim().toLocaleUpperCase()
+                  : destinationIcaoFilter;
+                const pendingOnlyFilter = Boolean(argv['pending-only']);
+                const companyFboJobs = await Promise.all(filteredFbos.map(async (fbo) => {
+                  const fboJobs = await getFboJobs(fbo.Id, apiKey);
+
+                  return {
+                    fbo,
+                    jobs: fboJobs.filter((job) => matchesFboJobFilters(job, {
+                      pendingOnly: pendingOnlyFilter,
+                      departureIcao: departureIcaoFilter,
+                      arrivalIcao: arrivalIcaoFilter,
+                    })),
+                  };
+                }));
+                if (argv['list-destinations']) {
+                  log(chalk.greenBright.bold('Your FBO Job Destinations\n'));
+                  logCompanyFboJobDestinations(companyFboJobs);
+                  break;
+                }
+
+                log(chalk.greenBright.bold('Your FBO Jobs\n'));
+                logCompanyFboJobs(companyFboJobs);
+              } else {
+                log(chalk.greenBright.bold('Your FBOs\n'));
+                logCompanyFbos(filteredFbos);
+              }
+            } else if (companyFbos.length && (airportIcaoFilter || needsFuelFilter)) {
+              log('No FBOs matched your FBO filters.');
             } else {
               log('No FBO... no 100LL! ' + chalk.magentaBright('✈'))
             }
@@ -265,7 +573,7 @@ export const companyCommand: CompanyCommand = {
           }
 
           case 'jobs': {
-            const companyJobs: Job[] = await api.getCompanyJobs();
+            const companyJobs: Job[] = await getCompanyJobs(argv['companyId'], argv['apiKey']);
 
             if (companyJobs.length) {
               log(chalk.greenBright.bold('Your Pending Jobs\n'));
@@ -289,18 +597,153 @@ export const companyCommand: CompanyCommand = {
             break;
           }
 
+          case 'notifications': {
+            const notificationLimit = typeof argv['limit'] === 'number' && argv['limit'] > 0 ? argv['limit'] : 20;
+            const notificationPage = typeof argv['page'] === 'undefined' || argv['page'] < 1 ? 1 : argv['page'];
+            const notificationStartDate = parseNotificationFilterDate(argv['start-date'], 'start date');
+            const notificationEndDate = parseNotificationFilterDate(argv['end-date'], 'end date');
+            if (notificationStartDate && notificationEndDate && notificationStartDate > notificationEndDate) {
+              throw new Error('Start date must be before or equal to end date.');
+            }
+            const notificationPages = typeof argv['pages'] === 'number' && argv['pages'] > 0
+              ? Math.floor(argv['pages'])
+              : notificationStartDate ? Number.MAX_SAFE_INTEGER : 1;
+            const notifications: CompanyNotification[] = [];
+
+            for (let pageOffset = 0; pageOffset < notificationPages; pageOffset++) {
+              const pageToFetch = notificationPage + pageOffset;
+              const startIndex = (pageToFetch - 1) * notificationLimit;
+              const pageNotifications = await getCompanyNotifications(
+                argv['companyId'],
+                argv['apiKey'],
+                startIndex,
+                notificationLimit
+              );
+
+              notifications.push(...pageNotifications);
+
+              const reachedStartDate = notificationStartDate
+                ? pageNotifications.some((notification) => {
+                  const eventDate = parseNotificationDate(notification.ZuluEventTime);
+                  return typeof eventDate !== 'undefined' && eventDate < notificationStartDate;
+                })
+                : false;
+
+              if (pageNotifications.length < notificationLimit || reachedStartDate) {
+                break;
+              }
+            }
+
+            const filteredNotifications = notificationStartDate || notificationEndDate
+              ? notifications.filter((notification) => {
+                const eventDate = parseNotificationDate(notification.ZuluEventTime);
+                return typeof eventDate !== 'undefined'
+                  && (!notificationStartDate || eventDate >= notificationStartDate)
+                  && (!notificationEndDate || eventDate <= notificationEndDate);
+              })
+              : notifications;
+
+            if (filteredNotifications.length) {
+              const pagesLabel = notificationPages === Number.MAX_SAFE_INTEGER
+                ? 'until start date'
+                : `${notificationPages} page${notificationPages > 1 ? 's' : ''} requested`;
+              const startDateLabel = notificationStartDate ? `, since ${notificationStartDate.toLocaleString('en-GB')}` : '';
+              const endDateLabel = notificationEndDate ? `, through ${notificationEndDate.toLocaleString('en-GB')}` : '';
+              log(chalk.greenBright.bold(`Your company notifications (Page ${notificationPage}, ${notificationLimit} per page, ${pagesLabel}${startDateLabel}${endDateLabel})\n`));
+              logCompanyNotifications(filteredNotifications);
+
+              if (!notificationStartDate && filteredNotifications.length === notificationLimit * notificationPages) {
+                log(`\nSuggested command: ${argv['$0']} company notifications --page=${notificationPage + notificationPages} --limit=${notificationLimit} --pages=${notificationPages}`);
+              }
+            } else {
+              log('No company notifications found.');
+            }
+            break;
+          }
+
+          case 'cashflow':
+          case 'cash-flow': {
+            const cashFlow: CashFlow = await api.getCompanyCashFlow();
+            const paymentFilter = typeof argv['payment'] === 'string' && argv['payment'].trim()
+              ? argv['payment'].trim()
+              : undefined;
+            const readableAccountIds = Boolean(argv['readable-account-ids']);
+            const cashFlowEntries = cashFlow.Entries as CashFlowPaymentEntry[];
+            const aircraftLookup = readableAccountIds || typeof argv['payment'] !== 'undefined'
+              ? await getAircraftLookup(api, cashFlowEntries)
+              : {};
+            let accountLookup: AccountLookup = {};
+
+            if (readableAccountIds) {
+              const currentDate = new Date();
+              const currentDateStr = currentDate.toISOString();
+              const priorDate = new Date().setDate(currentDate.getDate() - 30);
+              const priorDateStr = new Date(priorDate).toISOString();
+              const income: IncomeStatement = await api.getCompanyIncomeStatement(priorDateStr, currentDateStr);
+              const balanceSheet: BalanceSheet = await api.getCompanyBalanceSheet();
+              accountLookup = getAccountLookup(income, balanceSheet);
+            }
+
+            if (typeof argv['payment'] !== 'undefined') {
+              const paymentEntries = cashFlowEntries.filter((entry) => isPaymentEntry(entry, paymentFilter));
+
+              if (paymentEntries.length) {
+                log(chalk.greenBright.bold('Your cashflow payments\n'));
+                logCompanyCashFlowPayments(paymentEntries, aircraftLookup, readableAccountIds, accountLookup);
+              } else {
+                log(paymentFilter
+                  ? `No cashflow payment entries matched "${paymentFilter}".`
+                  : 'No cashflow payment entries found.');
+              }
+            } else if (cashFlow.Entries.length) {
+              log(chalk.greenBright.bold('Your cashflow\n'));
+              logCompanyCashFlow(cashFlow, readableAccountIds, aircraftLookup, accountLookup);
+            } else {
+              log('No cashflow entries found.');
+            }
+            break;
+          }
+
           case 'work-orders': {
             const workOrders: CompanyWorkOrder[] = await getCompanyWorkOrders(argv['companyId'], argv['apiKey']);
+            const workOrderDetailId = typeof argv['work-order-detail'] === 'string'
+              ? argv['work-order-detail'].trim()
+              : undefined;
+
+            if (workOrderDetailId) {
+              const detailedWorkOrder = workOrders.find((workOrder) => {
+                return workOrder.Id?.toLocaleLowerCase() === workOrderDetailId.toLocaleLowerCase();
+              });
+
+              if (detailedWorkOrder) {
+                logCompanyWorkOrderDetails(detailedWorkOrder);
+              } else {
+                log(`No work order found with ID "${workOrderDetailId}".`);
+              }
+              break;
+            }
+
             const aircraftIcaoFilter = typeof argv['aircraft-icao'] === 'string'
               ? argv['aircraft-icao'].trim().toLocaleUpperCase()
               : undefined;
+            const aircraftIdentFilter = typeof argv['aircraft-ident'] === 'string'
+              ? argv['aircraft-ident'].trim().toLocaleUpperCase()
+              : undefined;
+            const workOrderStatusFilter = typeof argv['work-order-status'] === 'string'
+              ? argv['work-order-status'].trim()
+              : undefined;
 
             const filteredWorkOrders = workOrders.filter((workOrder) => {
-              if (!aircraftIcaoFilter) {
-                return true;
-              }
+              const matchesAircraftIcao = aircraftIcaoFilter
+                ? getWorkOrderAircraftIcao(workOrder)?.toLocaleUpperCase() === aircraftIcaoFilter
+                : true;
+              const matchesAircraftIdent = aircraftIdentFilter
+                ? getWorkOrderAircraftIdentifier(workOrder)?.toLocaleUpperCase() === aircraftIdentFilter
+                : true;
 
-              return getWorkOrderAircraftIcao(workOrder)?.toLocaleUpperCase() === aircraftIcaoFilter;
+              return matchesAircraftIcao
+                && matchesAircraftIdent
+                && matchesWorkOrderStatus(workOrder, workOrderStatusFilter);
             });
 
             if (filteredWorkOrders.length) {
@@ -308,7 +751,7 @@ export const companyCommand: CompanyCommand = {
               logCompanyWorkOrders(filteredWorkOrders, argv['show-crew'], argv['work-order-id']);
             } else {
               log(workOrders.length
-                ? 'No work orders matched your aircraft ICAO filter.'
+                ? 'No work orders matched the selected filters.'
                 : 'No work orders found.');
             }
             break;
@@ -328,7 +771,11 @@ export const companyCommand: CompanyCommand = {
 
             if (sortedTradingGoods.length) {
               log(chalk.greenBright.bold('Your Trading Goods\n'));
-              logCompanyTradingGoods(sortedTradingGoods, argv['hide-ids'], argv['readable-ids']);
+              if (argv['summary']) {
+                logCompanyTradingGoodsSummary(sortedTradingGoods);
+              } else {
+                logCompanyTradingGoods(sortedTradingGoods, argv['hide-ids'], argv['readable-ids']);
+              }
             } else {
               log(
                 argv['merchandiseType'] || argv['trading-airport-icao']
