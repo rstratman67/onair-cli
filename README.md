@@ -138,6 +138,14 @@ Optionally filter FBO jobs by destination airport ICAO.
 
 `onair-cli company fbos --fbojobs --airport-icao=KILM --destination-icao=KERI`
 
+List only pending, untaken FBO jobs. Filter by a leg's departure airport, arrival airport, or both.
+
+`onair-cli company fbos --fbojobs --pending-only`
+
+`onair-cli company fbos --fbojobs --pending-only --departure-icao=KILM --arrival-icao=KERI`
+
+`--pending`, `--departure`, and `--arrival` are shorter aliases. The existing `--destination-icao` option remains available as an arrival filter.
+
 List available destination ICAOs for FBO jobs at an airport.
 
 `onair-cli company fbos --fbojobs --airport-icao=KILM --list-destinations`

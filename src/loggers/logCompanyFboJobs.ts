@@ -249,7 +249,7 @@ export const logCompanyFboJobs = (companyFboJobs: CompanyFboJobs[]): void => {
     console.log(chalk.whiteBright.bold(`${fbo.Airport.ICAO} - ${fbo.Name}`));
 
     if (!jobs.length) {
-      console.log(chalk.grey('No pending jobs.\n'));
+      console.log(chalk.grey('No matching jobs.\n'));
       return;
     }
 

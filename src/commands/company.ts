@@ -19,6 +19,7 @@ import {
 } from '../loggers/logCompanyWorkOrders';
 import { CompanyWorkOrder } from '../types/CompanyWorkOrder';
 import { CommonConfig } from '../utils/commonTypes';
+import { matchesFboJobFilters } from '../utils/fboJobFilters';
 import { logFlights } from '../loggers/logFlights';
 import { logCompany } from '../loggers/logCompany';
 import { logCompanyFleet } from '../loggers/logCompanyFleet';
@@ -212,12 +213,6 @@ const parseNotificationFilterDate = (dateValue: string | undefined, optionName: 
   return parsedDate;
 };
 
-const jobHasDestinationIcao = (job: Job, destinationIcao: string): boolean => {
-  return [...job.Cargos, ...job.Charters].some((leg) => {
-    return leg.DestinationAirport?.ICAO?.toLocaleUpperCase() === destinationIcao;
-  });
-};
-
 const isFuelBelowHalf = (quantity: number, capacity: number): boolean => {
   return capacity > 0 && quantity < capacity / 2;
 };
@@ -354,6 +349,22 @@ const builder = (yargs: yargs.Argv<CommonConfig>) => {
       type: 'string',
       alias: 'destination',
     })
+    .option('departure-icao', {
+      describe: 'Filter FBO jobs by leg departure airport ICAO (fbos --fbojobs only)',
+      type: 'string',
+      alias: 'departure',
+    })
+    .option('arrival-icao', {
+      describe: 'Filter FBO jobs by leg arrival airport ICAO (fbos --fbojobs only)',
+      type: 'string',
+      alias: 'arrival',
+    })
+    .option('pending-only', {
+      describe: 'Show only pending, untaken FBO jobs (fbos --fbojobs only)',
+      type: 'boolean',
+      alias: 'pending',
+      default: false,
+    })
     .option('list-destinations', {
       describe: 'List available destination ICAOs for FBO jobs (fbos --fbojobs only)',
       type: 'boolean',
@@ -389,6 +400,7 @@ const builder = (yargs: yargs.Argv<CommonConfig>) => {
     .example('$0 company fbos --fbojobs', 'List your FBOs with jobs grouped under each FBO')
     .example('$0 company fbos --fbojobs --airport-icao=KJFK', 'List FBO jobs for one airport')
     .example('$0 company fbos --fbojobs --airport-icao=KJFK --destination-icao=KORD', 'List FBO jobs for one airport with legs to a destination')
+    .example('$0 company fbos --fbojobs --pending-only --departure-icao=KJFK --arrival-icao=KORD', 'List pending FBO jobs for a route')
     .example('$0 company fbos --fbojobs --airport-icao=KJFK --list-destinations', 'List available FBO job destination ICAOs for one airport')
     .example('$0 company jobs', 'List your pending jobs')
     .example('$0 company income', 'Display your company income statement summary')
@@ -521,14 +533,23 @@ export const companyCommand: CompanyCommand = {
                 const destinationIcaoFilter = typeof argv['destination-icao'] === 'string'
                   ? argv['destination-icao'].trim().toLocaleUpperCase()
                   : undefined;
+                const departureIcaoFilter = typeof argv['departure-icao'] === 'string'
+                  ? argv['departure-icao'].trim().toLocaleUpperCase()
+                  : undefined;
+                const arrivalIcaoFilter = typeof argv['arrival-icao'] === 'string'
+                  ? argv['arrival-icao'].trim().toLocaleUpperCase()
+                  : destinationIcaoFilter;
+                const pendingOnlyFilter = Boolean(argv['pending-only']);
                 const companyFboJobs = await Promise.all(filteredFbos.map(async (fbo) => {
                   const fboJobs = await getFboJobs(fbo.Id, apiKey);
 
                   return {
                     fbo,
-                    jobs: destinationIcaoFilter
-                      ? fboJobs.filter((job) => jobHasDestinationIcao(job, destinationIcaoFilter))
-                      : fboJobs,
+                    jobs: fboJobs.filter((job) => matchesFboJobFilters(job, {
+                      pendingOnly: pendingOnlyFilter,
+                      departureIcao: departureIcaoFilter,
+                      arrivalIcao: arrivalIcaoFilter,
+                    })),
                   };
                 }));
                 if (argv['list-destinations']) {
