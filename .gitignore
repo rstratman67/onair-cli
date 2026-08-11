@@ -2,4 +2,6 @@ node_modules/
 .editorconfig
 /bin
 yalc.lock
+.env
+dist/
 .yalc
