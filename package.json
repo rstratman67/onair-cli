@@ -1,7 +1,7 @@
 {
   "name": "onair-cli",
   "description": "A CLI to display information from OnAir Airline Manager",
-  "version": "1.6.1",
+  "version": "1.7.0",
   "main": "bin/index.js",
   "author": {
     "name": "Will Kelly",
@@ -29,7 +29,7 @@
     "prepublishOnly": "npm run build",
     "version": "git add -A",
     "postversion": "git push && git push --tags",
-    "test": "npm run build && node test/logCompanyWorkOrders.test.js && node test/fboJobFilters.test.js",
+    "test": "npm run build && node test/logCompanyWorkOrders.test.js && node test/fboJobFilters.test.js && node test/logCompanyFleet.test.js",
     "lint": "eslint src --ext .ts,.tsx"
   },
   "dependencies": {

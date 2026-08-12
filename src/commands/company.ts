@@ -22,7 +22,12 @@ import { CommonConfig } from '../utils/commonTypes';
 import { matchesFboJobFilters } from '../utils/fboJobFilters';
 import { logFlights } from '../loggers/logFlights';
 import { logCompany } from '../loggers/logCompany';
-import { logCompanyFleet } from '../loggers/logCompanyFleet';
+import {
+  isAircraftInFlight,
+  logCompanyFleet,
+  requiresAircraftMaintenance,
+  sortCompanyFleet,
+} from '../loggers/logCompanyFleet';
 import { logCompanyFbos } from '../loggers/logCompanyFbos';
 import { logCompanyFboJobDestinations, logCompanyFboJobs } from '../loggers/logCompanyFboJobs';
 import { logCompanyJobs } from '../loggers/logCompanyJobs';
@@ -271,6 +276,30 @@ const builder = (yargs: yargs.Argv<CommonConfig>) => {
       'describe': 'Sort fleet results',
       'type': 'string',
       'choices': ['aircraft-type'],
+      'default': 'aircraft-type',
+    })
+    .option('detail', {
+      describe: 'Show fleet engine, maintenance, and aircraft ID details',
+      type: 'boolean',
+      default: false,
+    })
+    .option('maintenance', {
+      describe: 'Show fleet maintenance columns',
+      type: 'boolean',
+      alias: 'maintenence',
+      default: false,
+    })
+    .option('require-maintenance', {
+      describe: 'Show only aircraft that need maintenance now or soon',
+      type: 'boolean',
+      alias: 'require-maintenence',
+      default: false,
+    })
+    .option('in-flight', {
+      describe: 'Show only aircraft currently in flight',
+      type: 'boolean',
+      alias: ['InFlight', 'inflight'],
+      default: false,
     })
     .option('aircraft-icao', {
       'describe': 'Filter work orders by aircraft ICAO (work-orders only)',
@@ -390,7 +419,10 @@ const builder = (yargs: yargs.Argv<CommonConfig>) => {
     .example('$0 company fleet','List your aircraft')
     .example('$0 company fleet --aircraft-type=airbus', 'List only matching aircraft types')
     .example('$0 company fleet --airport-icao=KJFK', 'List only aircraft at an airport')
-    .example('$0 company fleet --sort=aircraft-type', 'Sort fleet by aircraft type')
+    .example('$0 company fleet --detail', 'List fleet with engine, maintenance, and aircraft ID details')
+    .example('$0 company fleet --maintenance', 'List fleet with maintenance details')
+    .example('$0 company fleet --require-maintenance', 'List aircraft needing maintenance now or soon')
+    .example('$0 company fleet --InFlight', 'List aircraft currently in flight')
     .example('$0 company flights','List your flights')
     .example('$0 company flights -p=2','List your flights, showing page 2')
     .example('$0 company fbos', 'List your FBOs')
@@ -453,29 +485,33 @@ export const companyCommand: CompanyCommand = {
             const airportIcaoFilter = typeof argv['airport-icao'] === 'string'
               ? argv['airport-icao'].trim().toLocaleUpperCase()
               : undefined;
+            const inFlightOnly = Boolean(argv['in-flight']);
+            const requireMaintenance = Boolean(argv['require-maintenance']);
 
-            let filteredFleet = companyFleet.filter((aircraft) => {
+            const filteredFleet = sortCompanyFleet(companyFleet.filter((aircraft) => {
               const matchesAircraftType = aircraftTypeFilter
                 ? aircraft.AircraftType.DisplayName.toLocaleLowerCase().includes(aircraftTypeFilter)
                 : true;
               const matchesAirportIcao = airportIcaoFilter
                 ? aircraft.CurrentAirport?.ICAO?.toLocaleUpperCase() === airportIcaoFilter
                 : true;
+              const matchesInFlight = inFlightOnly ? isAircraftInFlight(aircraft) : true;
+              const matchesMaintenance = requireMaintenance ? requiresAircraftMaintenance(aircraft) : true;
 
-              return matchesAircraftType && matchesAirportIcao;
-            });
-
-            if (argv['sort'] === 'aircraft-type') {
-              filteredFleet = [...filteredFleet].sort((a, b) => {
-                const typeSort = a.AircraftType.DisplayName.localeCompare(b.AircraftType.DisplayName);
-                return typeSort !== 0 ? typeSort : a.Identifier.localeCompare(b.Identifier);
-              });
-            }
+              return matchesAircraftType
+                && matchesAirportIcao
+                && matchesInFlight
+                && matchesMaintenance;
+            }));
 
             if (filteredFleet.length) {
               log(chalk.greenBright.bold('Your fleet of aircraft\n'));
               
-              logCompanyFleet(filteredFleet);
+              logCompanyFleet(filteredFleet, {
+                detail: Boolean(argv['detail']),
+                inFlight: inFlightOnly,
+                maintenance: Boolean(argv['maintenance']) || requireMaintenance,
+              });
               
               log(`\nSuggested command: ${argv['$0']} aircraft <aircraftId>`);
               log(`Suggested command: ${argv['$0']} flights <aircraftId>`);

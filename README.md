@@ -94,13 +94,31 @@ List details of your company's fleet of aircraft.
 
 `onair-cli company fleet`
 
-Filter by aircraft type or airport, and optionally sort by aircraft type.
+Fleet results omit aircraft IDs and are sorted by aircraft type, then identifier, by default. Filter by aircraft type or airport.
 
 `onair-cli company fleet --aircraft-type=airbus`
 
 `onair-cli company fleet --airport-icao=KJFK`
 
-`onair-cli company fleet --aircraft-type=airbus --airport-icao=KJFK --sort=aircraft-type`
+`onair-cli company fleet --aircraft-type=airbus --airport-icao=KJFK`
+
+Show engine hours and condition, maintenance information, and the aircraft ID. Aircraft ID is the final column.
+
+`onair-cli company fleet --detail`
+
+Show airframe hours, airframe condition, and hours before the next 100-hour inspection.
+
+`onair-cli company fleet --maintenance`
+
+Show only aircraft that require maintenance now or soon. This automatically includes the maintenance columns.
+
+`onair-cli company fleet --require-maintenance`
+
+Show only aircraft currently in flight. In-flight aircraft display `InFlight` as their airport location, with speed and altitude columns.
+
+`onair-cli company fleet --InFlight`
+
+The lowercase forms `--in-flight` and `--inflight` are also supported. `--maintenence` and `--require-maintenence` are accepted as compatibility aliases.
 
 ### Company Flights
 
