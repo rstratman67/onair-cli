@@ -230,8 +230,134 @@ const fboNeedsFuel = (fbo: Fbo, needs100LL: boolean, needsJet: boolean): boolean
     || (checkJet && isFuelBelowHalf(fbo.FuelJetQuantity, fbo.FuelJetCapacity));
 };
 
+type CompanyAction = 'fleet' | 'flights' | 'fbos' | 'jobs' | 'income' | 'cashflow' | 'notifications' | 'work-orders' | 'trading-goods';
+
+interface CompanyHelpContext {
+  options: string[];
+  examples: Array<[string, string]>;
+}
+
+const COMPANY_ACTION_ALIASES: Record<string, CompanyAction> = {
+  fleet: 'fleet',
+  flights: 'flights',
+  fbos: 'fbos',
+  jobs: 'jobs',
+  income: 'income',
+  cashflow: 'cashflow',
+  'cash-flow': 'cashflow',
+  notifications: 'notifications',
+  'work-orders': 'work-orders',
+  'trading-goods': 'trading-goods',
+  trading_goods: 'trading-goods',
+};
+
+const COMPANY_HELP_CONTEXTS: Record<CompanyAction, CompanyHelpContext> = {
+  fleet: {
+    options: ['aircraft-type', 'airport-icao', 'sort', 'detail', 'maintenance', 'require-maintenance', 'in-flight'],
+    examples: [
+      ['$0 company fleet', 'List your aircraft'],
+      ['$0 company fleet --aircraft-type=airbus', 'List only matching aircraft types'],
+      ['$0 company fleet --airport-icao=KJFK', 'List only aircraft at an airport'],
+      ['$0 company fleet --detail', 'List fleet with engine, maintenance, and aircraft ID details'],
+      ['$0 company fleet --maintenance', 'List fleet with maintenance details'],
+      ['$0 company fleet --require-maintenance', 'List aircraft needing maintenance now or soon'],
+      ['$0 company fleet --InFlight', 'List aircraft currently in flight'],
+    ],
+  },
+  flights: {
+    options: ['page'],
+    examples: [
+      ['$0 company flights', 'List your flights'],
+      ['$0 company flights -p=2', 'List your flights, showing page 2'],
+    ],
+  },
+  fbos: {
+    options: ['airport-icao', 'fbojobs', 'need-fuel', '100LL', 'Jet', 'destination-icao', 'departure-icao', 'arrival-icao', 'pending-only', 'list-destinations'],
+    examples: [
+      ['$0 company fbos', 'List your FBOs'],
+      ['$0 company fbos --airport-icao=KJFK', 'List FBOs for one airport'],
+      ['$0 company fbos --need-fuel --100LL', 'List FBOs with less than 50% 100LL available'],
+      ['$0 company fbos --need-fuel --Jet', 'List FBOs with less than 50% Jet fuel available'],
+      ['$0 company fbos --fbojobs', 'List your FBOs with jobs grouped under each FBO'],
+      ['$0 company fbos --fbojobs --airport-icao=KJFK', 'List FBO jobs for one airport'],
+      ['$0 company fbos --fbojobs --airport-icao=KJFK --destination-icao=KORD', 'List FBO jobs for one airport with legs to a destination'],
+      ['$0 company fbos --fbojobs --pending-only --departure-icao=KJFK --arrival-icao=KORD', 'List pending FBO jobs for a route'],
+      ['$0 company fbos --fbojobs --airport-icao=KJFK --list-destinations', 'List available FBO job destination ICAOs for one airport'],
+    ],
+  },
+  jobs: {
+    options: [],
+    examples: [['$0 company jobs', 'List your pending jobs']],
+  },
+  income: {
+    options: ['days'],
+    examples: [
+      ['$0 company income', 'Display your company income statement summary'],
+      ['$0 company income --days=30', 'Display your statement summary for the last 30 days'],
+    ],
+  },
+  cashflow: {
+    options: ['payment', 'readable-account-ids'],
+    examples: [
+      ['$0 company cashflow', 'Display your company cashflow'],
+      ['$0 company cashflow --payment=Cargo', 'Display cashflow payment entries matching Cargo'],
+      ['$0 company cashflow --payment=PAX', 'Display cashflow payment entries matching PAX'],
+      ['$0 company cashflow --readable-account-ids', 'Display cashflow with readable account names where available'],
+    ],
+  },
+  notifications: {
+    options: ['page', 'limit', 'pages', 'start-date', 'end-date'],
+    examples: [
+      ['$0 company notifications', 'Display your company notifications'],
+      ['$0 company notifications --limit=50', 'Display up to 50 company notifications'],
+      ['$0 company notifications --page=2', 'Display page 2 of company notifications'],
+      ['$0 company notifications --limit=50 --pages=3', 'Display three pages of company notifications'],
+      ['$0 company notifications --start-date=2026-05-31', 'Display notifications from now back to May 31, 2026'],
+      ['$0 company notifications --start-date=2026-05-01 --end-date=2026-05-31', 'Display notifications in a date range'],
+    ],
+  },
+  'work-orders': {
+    options: ['aircraft-icao', 'aircraft-ident', 'work-order-status', 'show-crew', 'work-order-id', 'work-order-detail'],
+    examples: [
+      ['$0 company work-orders', 'List your company work orders'],
+      ['$0 company work-orders --aircraft-icao=C172', 'List work orders for one aircraft ICAO'],
+      ['$0 company work-orders --aircraft-ident=N123AB', 'List work orders for one aircraft identifier'],
+      ['$0 company work-orders --work-order-status=pending', 'List pending work orders'],
+      ['$0 company work-orders --work-order-status=in-progress', 'List work orders currently in progress'],
+      ['$0 company work-orders --show-crew', 'List work orders with assigned crew names'],
+      ['$0 company work-orders --work-order-id', 'List work orders including the work order ID'],
+      ['$0 company work-orders --work-order-detail=WORK_ORDER_ID', 'Display details for one work order ID'],
+    ],
+  },
+  'trading-goods': {
+    options: ['merchandiseType', 'trading-airport-icao', 'hide-ids', 'readable-ids', 'summary'],
+    examples: [
+      ['$0 company trading-goods', 'List your trading goods'],
+      ['$0 company trading_goods --merchandiseType=Water', 'Filter trading goods by merchandise type name'],
+      ['$0 company trading_goods --trading-airport-icao=KJFK', 'Filter trading goods by airport ICAO'],
+      ['$0 company trading_goods --hide-ids', 'Hide raw ID columns for trading goods'],
+      ['$0 company trading_goods --readable-ids', 'Show human readable values instead of raw trading goods IDs'],
+      ['$0 company trading_goods --summary', 'Show a single-line summary for each trading good'],
+    ],
+  },
+};
+
+const COMPANY_ACTION_OPTIONS = Array.from(new Set(
+  Object.values(COMPANY_HELP_CONTEXTS).flatMap((context) => context.options)
+));
+
+const getRequestedCompanyAction = (): CompanyAction | undefined => {
+  const companyIndex = process.argv.slice(2).indexOf('company');
+  if (companyIndex === -1) {
+    return undefined;
+  }
+
+  const action = process.argv.slice(2)[companyIndex + 1];
+  return action ? COMPANY_ACTION_ALIASES[action] : undefined;
+};
+
 const builder = (yargs: yargs.Argv<CommonConfig>) => {
-  return yargs
+  const commandYargs = yargs
     .positional('action', {
       describe: 'Optional info to lookup from your company',
       type: 'string',
@@ -408,53 +534,37 @@ const builder = (yargs: yargs.Argv<CommonConfig>) => {
       describe: 'Show cashflow account names where available instead of raw account IDs (cashflow only)',
       type: 'boolean',
       default: false,
-    })
-    .example('$0 company','Get summary information for your company')
-    .example('$0 company notifications', 'Display your company notifications')
-    .example('$0 company notifications --limit=50', 'Display up to 50 company notifications')
-    .example('$0 company notifications --page=2', 'Display page 2 of company notifications')
-    .example('$0 company notifications --limit=50 --pages=3', 'Display three pages of company notifications')
-    .example('$0 company notifications --start-date=2026-05-31', 'Display notifications from now back to May 31, 2026')
-    .example('$0 company notifications --start-date=2026-05-01 --end-date=2026-05-31', 'Display notifications in a date range')
-    .example('$0 company fleet','List your aircraft')
-    .example('$0 company fleet --aircraft-type=airbus', 'List only matching aircraft types')
-    .example('$0 company fleet --airport-icao=KJFK', 'List only aircraft at an airport')
-    .example('$0 company fleet --detail', 'List fleet with engine, maintenance, and aircraft ID details')
-    .example('$0 company fleet --maintenance', 'List fleet with maintenance details')
-    .example('$0 company fleet --require-maintenance', 'List aircraft needing maintenance now or soon')
-    .example('$0 company fleet --InFlight', 'List aircraft currently in flight')
-    .example('$0 company flights','List your flights')
-    .example('$0 company flights -p=2','List your flights, showing page 2')
-    .example('$0 company fbos', 'List your FBOs')
-    .example('$0 company fbos --airport-icao=KJFK', 'List FBOs for one airport')
-    .example('$0 company fbos --need-fuel --100LL', 'List FBOs with less than 50% 100LL available')
-    .example('$0 company fbos --need-fuel --Jet', 'List FBOs with less than 50% Jet fuel available')
-    .example('$0 company fbos --fbojobs', 'List your FBOs with jobs grouped under each FBO')
-    .example('$0 company fbos --fbojobs --airport-icao=KJFK', 'List FBO jobs for one airport')
-    .example('$0 company fbos --fbojobs --airport-icao=KJFK --destination-icao=KORD', 'List FBO jobs for one airport with legs to a destination')
-    .example('$0 company fbos --fbojobs --pending-only --departure-icao=KJFK --arrival-icao=KORD', 'List pending FBO jobs for a route')
-    .example('$0 company fbos --fbojobs --airport-icao=KJFK --list-destinations', 'List available FBO job destination ICAOs for one airport')
-    .example('$0 company jobs', 'List your pending jobs')
-    .example('$0 company income', 'Display your company income statement summary')
-    .example('$0 company income --days=30', 'Display your statement summary for the last 30 days')
-    .example('$0 company cashflow', 'Display your company cashflow')
-    .example('$0 company cashflow --payment=Cargo', 'Display cashflow payment entries matching Cargo')
-    .example('$0 company cashflow --payment=PAX', 'Display cashflow payment entries matching PAX')
-    .example('$0 company cashflow --readable-account-ids', 'Display cashflow with readable account names where available')
-    .example('$0 company work-orders', 'List your company work orders')
-    .example('$0 company work-orders --aircraft-icao=C172', 'List work orders for one aircraft ICAO')
-    .example('$0 company work-orders --aircraft-ident=N123AB', 'List work orders for one aircraft identifier')
-    .example('$0 company work-orders --work-order-status=pending', 'List pending work orders')
-    .example('$0 company work-orders --work-order-status=in-progress', 'List work orders currently in progress')
-    .example('$0 company work-orders --show-crew', 'List work orders with assigned crew names')
-    .example('$0 company work-orders --work-order-id', 'List work orders including the work order ID')
-    .example('$0 company work-orders --work-order-detail=WORK_ORDER_ID', 'Display details for one work order ID')
-    .example('$0 company trading-goods', 'List your trading goods')
-    .example('$0 company trading_goods --merchandiseType=Water', 'Filter trading goods by merchandise type name')
-    .example('$0 company trading_goods --trading-airport-icao=KJFK', 'Filter trading goods by airport ICAO')
-    .example('$0 company trading_goods --hide-ids', 'Hide raw ID columns for trading goods')
-    .example('$0 company trading_goods --readable-ids', 'Show human readable values instead of raw trading goods IDs')
-    .example('$0 company trading_goods --summary', 'Show a single-line summary for each trading good');
+    });
+
+  const requestedAction = getRequestedCompanyAction();
+  const helpContext = requestedAction ? COMPANY_HELP_CONTEXTS[requestedAction] : undefined;
+  const visibleOptions = new Set(helpContext?.options || []);
+
+  COMPANY_ACTION_OPTIONS.forEach((option) => {
+    if (!visibleOptions.has(option)) {
+      commandYargs.hide(option);
+    }
+  });
+
+  if (requestedAction && helpContext) {
+    commandYargs
+      .usage(`$0 company ${requestedAction} [options]\n\n${helpContext.examples[0][1]}`)
+      .hide('action');
+
+    helpContext.examples.forEach(([command, description]) => {
+      commandYargs.example(command, description);
+    });
+  } else {
+    commandYargs
+      .usage('$0 company [action]\n\nGet information on your company, aircraft, flights and FBOs')
+      .example('$0 company', 'Get summary information for your company');
+
+    Object.values(COMPANY_HELP_CONTEXTS).forEach((context) => {
+      commandYargs.example(context.examples[0][0], context.examples[0][1]);
+    });
+  }
+
+  return commandYargs;
 }
 
 type CompanyCommand = (typeof builder) extends BuilderCallback<CommonConfig, infer R> ? CommandModule<CommonConfig, R> : never;
