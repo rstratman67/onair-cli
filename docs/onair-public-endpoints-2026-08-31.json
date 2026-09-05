@@ -1,0 +1,186 @@
+{
+  "source": "https://server1.onair.company/swagger/docs/v1",
+  "capturedAt": "2026-09-01T00:46:42.8434751Z",
+  "swaggerVersion": "2.0",
+  "apiTitle": "OnAir",
+  "apiVersion": "v1",
+  "swaggerSha256": "6b2f36e2428478634c2e1380485cdffa6a6cfb9c081b4f8575f798c3ac4e7e70",
+  "operationCount": 35,
+  "operations": [
+    {
+      "method": "GET",
+      "path": "/api/v1/aircraft/{aircraftId}",
+      "operationId": "WSAPIPublic_GetAircraftDetail"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/aircraft/{aircraftId}/economic_details",
+      "operationId": "WSAPIPublic_GetAircraftEconomicDetails"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/aircraft/{aircraftId}/flights",
+      "operationId": "WSAPIPublic_GetAircraftFlights"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/aircraft/{aircraftId}/maintenance_costs",
+      "operationId": "WSAPIPublic_GetAircraftMaintenanceCosts"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/aircrafttypes/{aircraftTypeId}",
+      "operationId": "WSAPIPublic_GetAircraftTypeDetail"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/airports/{icao}",
+      "operationId": "WSAPIPublic_GetAirportDetail"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/airports/{icao}/aircraft",
+      "operationId": "WSAPIPublic_GetAircraftAtAirport"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/company/{companyId}",
+      "operationId": "WSAPIPublic_GetCompanyDetail"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/company/{companyId}/balancesheet",
+      "operationId": "WSAPIPublic_GetCompanyCashBalanceSheet"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/company/{companyId}/cashflow",
+      "operationId": "WSAPIPublic_GetCompanyCashFlow"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/company/{companyId}/dashboard",
+      "operationId": "WSAPIPublic_GetCompanyDashboard"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/company/{companyId}/employees",
+      "operationId": "WSAPIPublic_GetCompanyEmployees"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/company/{companyId}/fbos",
+      "operationId": "WSAPIPublic_GetCompanyFBOs"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/company/{companyId}/fleet",
+      "operationId": "WSAPIPublic_GetCompanyFleet"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/company/{companyId}/flights",
+      "operationId": "WSAPIPublic_GetCompanyFlights"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/company/{companyId}/incomestatement",
+      "operationId": "WSAPIPublic_GetCompanyIncomeStatement"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/company/{companyId}/jobs/completed",
+      "operationId": "WSAPIPublic_GetCompanyCompletedJobs"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/company/{companyId}/jobs/pending",
+      "operationId": "WSAPIPublic_GetCompanyPendingJobs"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/company/{companyId}/missionflighttracks",
+      "operationId": "WSAPIPublic_GetCompanyMissionsFlightTracks"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/company/{companyId}/notifications",
+      "operationId": "WSAPIPublic_GetCompanyNotifications"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/company/{companyId}/trading_goods",
+      "operationId": "WSAPIPublic_GetCompanyTradingGoods"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/company/{companyId}/workorders",
+      "operationId": "WSAPIPublic_GetCompanyWorkOrders"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/company/{companyId}/workorders/{aircraftId}",
+      "operationId": "WSAPIPublic_GetCompanyWorkOrders"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/employee/{employeeId}",
+      "operationId": "WSAPIPublic_GetEmployeeDetail"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/fbo_jobs/{missionId}/accept",
+      "operationId": "WSAPIPublic_AcceptFBOJob"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/fbo/{fboId}/jobs",
+      "operationId": "WSAPIPublic_GetFBOJobs"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/flights/{flightId}",
+      "operationId": "WSAPIPublic_GetFlight"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/flights/{flightId}/zipped_events",
+      "operationId": "WSAPIPublic_GetFlightZippedEvents"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/flights/{flightId}/zipped_flightplan",
+      "operationId": "WSAPIPublic_GetFlightZippedSimBrief"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/twitchoverlay/{companyId}",
+      "operationId": "WSAPIPublic_GetTwitchData"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/va/{vaId}",
+      "operationId": "WSAPIPublic_GetVADetail"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/va/{vaId}/members",
+      "operationId": "WSAPIPublic_GetVAMembers"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/va/{vaId}/roles",
+      "operationId": "WSAPIPublic_GetVARoles"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/va/{vaId}/shareholders",
+      "operationId": "WSAPIPublic_GetVAShareHolders"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/zipped_metars",
+      "operationId": "WSAPIPublic_GetZippedMetars"
+    }
+  ]
+}
